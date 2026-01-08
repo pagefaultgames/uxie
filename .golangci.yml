@@ -1,0 +1,34 @@
+# .golangci.yml
+version: "2"
+run:
+  timeout: 3m
+  tests: true
+
+formatters:
+  enable:
+    - gofumpt
+    - golines
+  settings:
+    gofumpt:
+      extra-rules: true
+    golines:
+      max-len: 120
+      chain-split-dots: true
+      tab-len: 4
+
+linters:
+  default: standard
+  enable:
+    - staticcheck
+    - whitespace
+  settings:
+    errcheck:
+      # Catch unchecked errors, but allow _ in tests.
+      exclude-functions:
+        - (*testing.T).Error
+        - (*testing.T).Fatal
+        - (*testing.T).Fatalf
+        - (*testing.T).Log
+        - (*testing.T).Logf
+        - (*testing.T).Errorf
+      check-type-assertions: true

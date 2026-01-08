@@ -1,0 +1,14 @@
+# SPDX-FileCopyrightText: 2026 Pagefault Games
+#
+# SPDX-License-Identifier: AGPL-3.0-or-later
+
+#:schema https://reuse.software/reuse-toml-v1.schema.json
+version = 1
+
+# Explicitly annotate all .sh files to avoid messing up shebangs
+[[annotations]]
+path = [
+    "*.sh"
+]
+SPDX-FileCopyrightText = "2026 Pagefault Games"
+SPDX-License-Identifier = "AGPL-3.0-or-later"

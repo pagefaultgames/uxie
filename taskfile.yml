@@ -1,0 +1,40 @@
+# yaml-language-server: $schema=https://taskfile.dev/schema.json
+version: '3'
+
+tasks:
+  init:
+    desc: Install and initialize Lefthook.
+    cmds:
+      - task: lefthook-install
+      - task: lefthook-setup
+    method: none
+
+  lefthook-install:
+    desc: Install Lefthook if not already installed.
+    cmd: |
+        if command -v lefthook >/dev/null 2>&1; then
+          echo "Lefthook already installed."
+        else
+          echo "Lefthook not found; installing via go install..."
+          go install github.com/evilmartians/lefthook/v2@latest
+        fi
+    method: none
+
+  lefthook-setup:
+    desc: Set up Lefthook git hooks.
+    cmd: lefthook install
+    method: none
+
+  lint:
+    desc: Run golangci-lint code quality checks.
+    preconditions:
+      - sh: command -v golangci-lint
+        msg: Golangci-lint executable not found in PATH!
+    cmds:
+      - cmd: source ./tasks/lint.sh {{.CLI_ARGS}}
+    method: none
+
+  test:
+    desc: Run backend tests with environment-aware defaults.
+    cmd: source ./tasks/test.sh {{.CLI_ARGS}}
+    method: none

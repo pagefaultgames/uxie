@@ -1,0 +1,27 @@
+# SPDX-FileCopyrightText: 2026 Pagefault Games
+#
+# SPDX-License-Identifier: AGPL-3.0-or-later
+
+#:schema https://reuse.software/reuse-toml-v1.schema.json
+version = 1
+
+# Files with no copyright.
+# It is better to explicitly include the copyright (or lack thereof) whenever possible,
+# but this becomes tedious when working with auto-generated files and the sort
+[[annotations]]
+path = [
+    # Dependency files
+    "**/go.mod",
+    "**/go.sum",
+    # Git stuff
+    "**/*.gitignore",
+    "**/*.gitmodules",
+    "**/*.gitattributes",
+    # configuration files
+    "**/.golangci.yml",
+    "**/taskfile.yml",
+    "**/.vscode/**/*.json",
+    "**/.zed/**/*.json",
+]
+SPDX-License-Identifier = "CC0-1.0"
+SPDX-FileCopyrightText = "NONE"

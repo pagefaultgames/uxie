@@ -1,0 +1,116 @@
+# Workflow to perform code quality checks on each commit/PR to main
+name: Code Quality
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+    branches:
+      - "main"
+  push:
+    branches:
+      - "main"
+  merge_group:
+    types: [checks_requested]
+  # allow manually triggering on branches
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  go_version: 1.25.5
+
+concurrency:
+  group: ${{github.workflow}}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  code-quality:
+    name: Check code quality
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Git repository
+        uses: actions/checkout@v4
+
+      - name: Setup Go environment
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.go_version }}
+          check-latest: true
+          cache: true
+
+      - name: Install go-task
+        uses: arduino/setup-task@v2
+
+      - name: Run golangci-lint
+        uses: golangci/golangci-lint-action@v8
+        with:
+          version: v2.5.0
+
+      - name: Test Go Files
+        id: go-tests
+        run: task test:ci
+
+      - name: Upload gotestsum reports
+        uses: actions/upload-artifact@v4
+        with:
+          name: gotestsum-report
+          path: test-results/**
+          overwrite: true
+          retention-days: 7
+        if: ${{ !cancelled() }}
+
+      - name: Produce Test Summary
+        uses: test-summary/action@v2
+        with:
+          paths: test-results/**/*-report.xml
+        if: ${{ !cancelled() }}
+
+  golangci-lint:
+    name: Lint with golangci
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Git repository
+        uses: actions/checkout@v4
+
+      - name: Setup Go environment
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.go_version }}
+          check-latest: true
+          cache: true
+
+      - name: Run golangci-lint
+        uses: golangci/golangci-lint-action@v8
+        with:
+          version: v2.5.0
+
+  # TODO: Enable
+  # reuse:
+  #   name: Check REUSE compliance
+  #   runs-on: ubuntu-latest
+
+  #   steps:
+  #     - name: Checkout Git repository
+  #       uses: actions/checkout@v4
+
+  #     - name: Run REUSE Compliance Check
+  #       uses: fsfe/reuse-action@v6
+
+  shellcheck:
+    name: Check Shell Scripts
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Git repository
+        uses: actions/checkout@v4
+
+      - name: Check shell scripts
+        uses: luizm/action-sh-checker@master
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SHFMT_OPTS: -sd # arguments to shfmt.
+        with:
+          sh_checker_comment: true
+          sh_checker_checkbashisms_enable: true
