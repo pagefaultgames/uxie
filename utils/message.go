@@ -21,14 +21,13 @@ var ErrMissingRequiredField = errors.New(
 
 // A replacement for [tempest.SendMessage] that accepts [types.CreateMessageParams] instead of [tempest.Message]
 // Necessary, as tempest does not include support for fields like AllowedMentions.
-// At the moment, does not support files.
 func SendDiscordMessage(
 	client *tempest.HTTPClient,
 	channelID tempest.Snowflake,
 	message types.CreateMessageParams,
 	files []tempest.File,
 ) error {
-	// Discord requires at least one of content, embeds, sticker_ids, components, files[n], or poll to be present.
+	// Discord requires at least one of content, embeds, sticker_ids, components, files, or poll to be present.
 	if message.Content == "" &&
 		len(message.Embeds) == 0 &&
 		len(message.Components) == 0 &&

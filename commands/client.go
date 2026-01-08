@@ -28,29 +28,12 @@ func NewClient(httpClient *tempest.HTTPClient, guildID tempest.Snowflake) *Clien
 	return GlobalClient
 }
 
-
 // RegisterDefaultCommands registers all default commands to the Tempest HTTP client.
 func (c *Client) RegisterDefaultCommands() error {
 	for _, cmd := range defaultCommands {
 		if err := cmd.Register(c.HTTPClient); err != nil {
 			return fmt.Errorf("failed to register command %s: %w", cmd.Name, err)
 		}
-	}
-	return nil
-}
-
-// addHelpCommand adds a new help command to the bot's database.
-func (c *Client) addHelpCommand(name, description, text string) error {
-	if err := c.RegisterSubCommand(tempest.Command{
-		Name:        name,
-		Description: description,
-		Type:        tempest.CHAT_INPUT_COMMAND_TYPE,
-		SlashCommandHandler: NewMessageHandler(text),
-	}, genericHelp.Name); err != nil {
-		return fmt.Errorf("failed to register help command with Tempest: %w", err)
-	}
-	if err := db.HelpCommands.AddCommand(name, description, text); err != nil {
-		return fmt.Errorf("failed to add help command to database: %w", err)
 	}
 	return nil
 }

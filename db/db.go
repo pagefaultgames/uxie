@@ -1,7 +1,6 @@
 package db
 
 import (
-	"context"
 	"database/sql"
 	"errors"
 	"fmt"
@@ -9,29 +8,29 @@ import (
 	_ "github.com/mattn/go-sqlite3"
 )
 
-// HelpCommands is the global help command database.
-var HelpCommands *Store
+// HelpTopics is the global help topic database.
+var HelpTopics *Store
 
-// Store wraps a SQLite database that tracks registered help commands and their relevant data.
-// TODO: Implement "aliases" for commands using a separate linked database
+// Store wraps a SQLite database that tracks registered help topics and their relevant data.
+// TODO: Implement "aliases" for topics using a separate linked database
 type Store struct {
 	db *sql.DB
 }
 
-// A CommandId is an opaque reference to a help command's ID, used for clarity of intent.
-type CommandId = int64
+// A TopicId is an opaque reference to a help topic's ID, used for clarity of intent.
+type TopicId = int64
 
 const dbPath = "help.db"
 
-type Command struct {
-	ID          CommandId
+type HelpTopic struct {
+	ID          TopicId
 	Name        string
 	Description string
 	Text        string
 }
 
 // Open creates (or opens) a SQLite database at the default path, initializing it if necessary.
-// It will be stored inside [HelpCommands].
+// It will be stored inside [HelpTopics].
 func Open() error {
 	db, err := sql.Open("sqlite3", dbPath)
 	if err != nil {
@@ -44,16 +43,16 @@ func Open() error {
 		return err
 	}
 
-	HelpCommands = s
+	HelpTopics = s
 	return nil
 }
 
 // Close releases the underlying database connection.
 func Close() error {
-	if HelpCommands == nil || HelpCommands.db == nil {
+	if HelpTopics == nil || HelpTopics.db == nil {
 		return nil
 	}
-	return HelpCommands.db.Close()
+	return HelpTopics.db.Close()
 }
 
 func (s *Store) init() error {
@@ -62,7 +61,7 @@ func (s *Store) init() error {
 	}
 
 	if _, err := s.db.Exec(`
-		CREATE TABLE IF NOT EXISTS commands (
+		CREATE TABLE IF NOT EXISTS topics (
 			id          INTEGER PRIMARY KEY,
 			name        VARCHAR NOT NULL UNIQUE,
 			description VARCHAR NOT NULL,
@@ -74,19 +73,19 @@ func (s *Store) init() error {
 	return nil
 }
 
-// GetCommand retrieves the [Command] for a given named help command with the given name.
-func (s *Store) GetCommand(name string) (cmd *Command, err error) {
+// GetHelpTopic retrieves the [HelpTopic] for a given named help topic with the given name.
+func (s *Store) GetHelpTopic(name string) (cmd *HelpTopic, err error) {
 	var (
-		cid        CommandId
+		cid        TopicId
 		desc, text string
 	)
 	err = s.db.QueryRow(`
-		SELECT description, text, id FROM commands WHERE name = ?
+		SELECT description, text, id FROM topics WHERE name = ?
 		`, name).Scan(&desc, &text, &cid)
 	if err != nil {
 		return cmd, err
 	}
-	cmd = &Command{
+	cmd = &HelpTopic{
 		ID:          cid,
 		Name:        name,
 		Description: desc,
@@ -95,23 +94,11 @@ func (s *Store) GetCommand(name string) (cmd *Command, err error) {
 	return cmd, err
 }
 
-// HasCommand checks if a command with the given name exists in the database.
-func (s *Store) HasCommand(name string) (bool, error) {
-	var exists bool
-	err := s.db.QueryRow(`
-		SELECT EXISTS(SELECT 1 FROM commands WHERE name = ?)
-		`, name).Scan(&exists)
-	if err != nil {
-		return false, err
-	}
-	return exists, nil
-}
-
-// AddCommand adds a new help command to the database.
-// If a command with the same name already exists, it will be overwritten.
-func (s *Store) AddCommand(name, description, text string) error {
+// AddHelpTopic adds a new help topic to the database.
+// If a topic with the same name already exists, it will be overwritten.
+func (s *Store) AddHelpTopic(name, description, text string) error {
 	_, err := s.db.Exec(`
-		INSERT INTO commands (name, description, text) VALUES (?, ?, ?)
+		INSERT INTO topics (name, description, text) VALUES (?, ?, ?)
 		ON CONFLICT DO UPDATE SET description = excluded.description, text = excluded.text`,
 		name, description, text)
 	if err != nil {
@@ -121,10 +108,10 @@ func (s *Store) AddCommand(name, description, text string) error {
 	return nil
 }
 
-// DeleteCommand deletes the named command.
-func (s *Store) DeleteCommand(id CommandId) error {
+// DeleteTopic deletes the named help topic.
+func (s *Store) DeleteTopic(id TopicId) error {
 	err := s.db.QueryRow(
-		`DELETE FROM commands WHERE id = ? RETURNING id`,
+		`DELETE FROM topics WHERE id = ? RETURNING id`,
 		id).Scan()
 
 	if errors.Is(err, sql.ErrNoRows) {
