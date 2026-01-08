@@ -1,17 +1,20 @@
 package main
 
 import (
-	"log"
+	"fmt"
+	"log/slog"
 	"net/http"
 	"os"
 
 	"github.com/amatsagu/tempest"
-	"github.com/pagefaultgames/oranguru/bot"
+	"github.com/pagefaultgames/oranguru/commands"
+	"github.com/pagefaultgames/oranguru/db"
+	"github.com/pagefaultgames/oranguru/utils"
 )
 
 func main() {
-	log.Println("Creating new Tempest client...")
-	client := tempest.NewHTTPClient(tempest.HTTPClientOptions{
+	slog.Info("Creating new Tempest client...")
+	httpClient := tempest.NewHTTPClient(tempest.HTTPClientOptions{
 		BaseClientOptions: tempest.BaseClientOptions{
 			Token: os.Getenv("DISCORD_BOT_TOKEN"),
 		},
@@ -21,24 +24,32 @@ func main() {
 	addr := os.Getenv("LISTENING_ADDRESS")
 	guildID, err := tempest.StringToSnowflake(os.Getenv("DISCORD_GUILD_ID"))
 	if err != nil {
-		log.Fatal("failed to parse guild ID env variable:", err)
+		utils.ErrorAttrs(
+			"Failed to parse guild ID env var",
+			slog.String("env var", os.Getenv("DISCORD_GUILD_ID")),
+			slog.String("error", err.Error()),
+		)
+		panic(fmt.Sprintf("failed to parse guild ID env variable: %v\n", err))
 	}
 
-	b, err := bot.NewBot(client, guildID)
-	if err != nil {
-		log.Fatal("failed to create bot:", err)
-	}
-	defer b.Close()
-
-	if err := b.RegisterDefaultCommands(); err != nil {
-		log.Fatal("failed to register default commands:", err)
+	client := commands.NewClient(httpClient, guildID)
+	if err := db.Open(); err != nil {
+		utils.ErrorAttrs("Failed to open database", slog.String("error", err.Error()))
+		panic(fmt.Sprintf("failed to open database: %v\n", err))
 	}
 
-	http.HandleFunc("POST /discord/callback", client.DiscordRequestHandler)
+	defer db.Close()
 
-	log.Printf("Serving application at: %s/discord/callback\n", addr)
+	if err := client.RegisterDefaultCommands(); err != nil {
+		utils.ErrorAttrs("Failed to register default commands", slog.String("error", err.Error()))
+		panic(fmt.Sprintf("failed to register default commands: %v\n", err))
+	}
+
+	http.HandleFunc("POST /discord/callback", httpClient.DiscordRequestHandler)
+
+	slog.Info("Serving application at: " + addr + "/discord/callback\n")
 
 	if err = http.ListenAndServe(addr, nil); err != nil {
-		log.Fatal("the shit has hit the fan", err)
+		utils.ErrorAttrs("the shit has hit the fan", slog.Any("error", err))
 	}
 }

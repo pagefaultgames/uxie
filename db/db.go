@@ -9,6 +9,9 @@ import (
 	_ "github.com/mattn/go-sqlite3"
 )
 
+// HelpCommands is the global help command database.
+var HelpCommands *Store
+
 // Store wraps a SQLite database that tracks registered help commands and their relevant data.
 // TODO: Implement "aliases" for commands using a separate linked database
 type Store struct {
@@ -27,36 +30,38 @@ type Command struct {
 	Text        string
 }
 
-// Open creates (or opens) a SQLite database at the given path, initializing it if necessary.
-func Open() (*Store, error) {
+// Open creates (or opens) a SQLite database at the default path, initializing it if necessary.
+// It will be stored inside [HelpCommands].
+func Open() error {
 	db, err := sql.Open("sqlite3", dbPath)
 	if err != nil {
-		return nil, err
-	}
-
-	s := &Store{db: db}
-	if err := s.init(context.Background()); err != nil {
-		db.Close()
-		return nil, err
-	}
-
-	return s, nil
-}
-
-// Close releases the underlying database connection.
-func (s *Store) Close() error {
-	if s == nil || s.db == nil {
-		return nil
-	}
-	return s.db.Close()
-}
-
-func (s *Store) init(ctx context.Context) error {
-	if _, err := s.db.ExecContext(ctx, `PRAGMA foreign_keys = ON`); err != nil {
 		return err
 	}
 
-	if _, err := s.db.ExecContext(ctx, `
+	s := &Store{db: db}
+	if err := s.init(); err != nil {
+		db.Close()
+		return err
+	}
+
+	HelpCommands = s
+	return nil
+}
+
+// Close releases the underlying database connection.
+func Close() error {
+	if HelpCommands == nil || HelpCommands.db == nil {
+		return nil
+	}
+	return HelpCommands.db.Close()
+}
+
+func (s *Store) init() error {
+	if _, err := s.db.Exec(`PRAGMA foreign_keys = ON`); err != nil {
+		return err
+	}
+
+	if _, err := s.db.Exec(`
 		CREATE TABLE IF NOT EXISTS commands (
 			id          INTEGER PRIMARY KEY,
 			name        VARCHAR NOT NULL UNIQUE,
@@ -123,7 +128,7 @@ func (s *Store) DeleteCommand(id CommandId) error {
 		id).Scan()
 
 	if errors.Is(err, sql.ErrNoRows) {
-		return 	fmt.Errorf("command with id %d not found", id)
+		return fmt.Errorf("command with id %d not found", id)
 	} else if err != nil {
 		return fmt.Errorf("failed to delete command %d from database: %w", id, err)
 	}

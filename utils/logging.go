@@ -1,6 +1,7 @@
-package bot
+package utils
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"log/slog"
@@ -27,20 +28,24 @@ func setLoggerDest(path string) error {
 	return nil
 }
 
-// debugAttrs is a wrapper around [slog.LogAttrs] for logging debug messages.
-func debugAttrs(msg string, attrs ...slog.Attr) {
-	slog.LogAttrs(nil, slog.LevelDebug, msg, attrs...)
+// DebugAttrs is a wrapper around [slog.LogAttrs] for logging debug messages.
+func DebugAttrs(msg string, attrs ...slog.Attr) {
+	slog.LogAttrs(context.Background(), slog.LevelDebug, msg, attrs...)
 }
 
-// infoAttrs is a wrapper around [slog.LogAttrs] for logging informative messages.
-func infoAttrs(msg string, attrs ...slog.Attr) {
-	slog.LogAttrs(nil, slog.LevelInfo, msg, attrs...)
+// InfoAttrs is a wrapper around [slog.LogAttrs] for logging informative messages.
+func InfoAttrs(msg string, attrs ...slog.Attr) {
+	slog.LogAttrs(context.Background(), slog.LevelInfo, msg, attrs...)
 }
-func warnAttrs(msg string, attrs ...slog.Attr) {
-	slog.LogAttrs(nil, slog.LevelWarn, msg, attrs...)
+
+// WarnAttrs is a wrapper around [slog.LogAttrs] for logging warning messages.
+func WarnAttrs(msg string, attrs ...slog.Attr) {
+	slog.LogAttrs(context.Background(), slog.LevelWarn, msg, attrs...)
 }
-func errorAttrs(msg string, attrs ...slog.Attr) {
-	slog.LogAttrs(nil, slog.LevelError, msg, attrs...)
+
+// ErrorAttrs is a wrapper around [slog.LogAttrs] for logging error messages.
+func ErrorAttrs(msg string, attrs ...slog.Attr) {
+	slog.LogAttrs(context.Background(), slog.LevelError, msg, attrs...)
 }
 
 func init() {

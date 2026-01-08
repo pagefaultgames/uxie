@@ -19,14 +19,17 @@ tasks:
           go install github.com/evilmartians/lefthook/v2@latest
         fi
     method: none
+    internal: true
 
   lefthook-setup:
     desc: Set up Lefthook git hooks.
     cmd: lefthook install
     method: none
+    internal: true
 
   lint:
     desc: Run golangci-lint code quality checks.
+    aliases: [fmt]
     preconditions:
       - sh: command -v golangci-lint
         msg: Golangci-lint executable not found in PATH!
