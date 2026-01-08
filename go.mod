@@ -2,13 +2,15 @@ module github.com/pagefaultgames/oranguru
 
 go 1.25.5
 
-tool (
-	github.com/evilmartians/lefthook/v2
+tool github.com/evilmartians/lefthook/v2
+
+require (
+	github.com/amatsagu/tempest v1.4.4
+	github.com/mattn/go-sqlite3 v1.14.33
 )
 
 require (
 	github.com/alessio/shellescape v1.4.1 // indirect
-	github.com/amatsagu/tempest v1.4.4 // indirect
 	github.com/aymanbagabas/go-osc52/v2 v2.0.1 // indirect
 	github.com/bmatcuk/doublestar/v4 v4.9.1 // indirect
 	github.com/briandowns/spinner v1.23.2 // indirect

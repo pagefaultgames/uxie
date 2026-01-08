@@ -1,0 +1,5 @@
+.vscode/**
+!.vscode/*.code-snippets
+!.vscode/extensions.json
+
+.zed/**
