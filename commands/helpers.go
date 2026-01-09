@@ -52,7 +52,7 @@ func getStringSelectValue(
 
 // newMessageHandler creates a command handler that sends a predefined message.
 func newMessageHandler(content string) func(itx *tempest.CommandInteraction) {
-	return newFuncMessageHandler(func () string {return content})
+	return newFuncMessageHandler(func() string { return content })
 }
 
 // newFuncMessageHandler creates a command handler that sends a variable message.

@@ -4,7 +4,6 @@ import (
 	"fmt"
 
 	"github.com/amatsagu/tempest"
-	"github.com/pagefaultgames/oranguru/db"
 )
 
 type Client struct {

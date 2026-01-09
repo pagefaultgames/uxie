@@ -19,19 +19,18 @@ type Command struct {
 	handlers map[string]modalHandler
 }
 
-
 func (c *Command) Register(client *tempest.HTTPClient) error {
 	if err := client.RegisterCommand(c.Command); err != nil {
-		utils.ErrorAttrs("Failed to register command", slog.String("command", c.Command.Name))
-		return fmt.Errorf("Failed to register command: %w", err)
+		utils.ErrorAttrs("Failed to register command", slog.String("command", c.Name))
+		return fmt.Errorf("failed to register command: %w", err)
 	}
 
 	for cid, handler := range c.handlers {
 		if err := client.RegisterModal(cid, handler); err != nil {
 			utils.ErrorAttrs("Failed to register command modal",
-				slog.String("command", c.Command.Name),
+				slog.String("command", c.Name),
 				slog.String("modal_id", cid))
-			return fmt.Errorf("Failed to register command modal %s: %w", cid, err)
+			return fmt.Errorf("failed to register command modal %s: %w", cid, err)
 		}
 	}
 	return nil

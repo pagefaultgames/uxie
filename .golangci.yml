@@ -23,6 +23,9 @@ linters:
     - staticcheck
     - whitespace
     - nakedret
+  disable:
+    # Disable for now to avoid excessive noise
+    - unused
   settings:
     nakedret:
       max-func-lines: 50

@@ -39,7 +39,7 @@ func Open() error {
 
 	s := &Store{db: db}
 	if err := s.init(); err != nil {
-		db.Close()
+		err = errors.Join(err, db.Close())
 		return err
 	}
 

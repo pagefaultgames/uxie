@@ -35,7 +35,12 @@ tasks:
       - sh: command -v golangci-lint
         msg: Golangci-lint executable not found in PATH!
     cmds:
-      - cmd: source ./tasks/lint.sh {{.CLI_ARGS}}
+      - cmd: |
+          if [ -z "$CI" ]; then
+            golangci-lint fmt
+          fi
+      - cmd: golangci-lint run --fix
+
     method: none
 
   test:

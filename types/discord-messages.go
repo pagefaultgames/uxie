@@ -24,5 +24,4 @@ type CreateMessageParams struct {
 	// PayloadJSON     string                    `json:"payload_json,omitempty"`     // JSON encoded body of non-file params
 	// EnforceNonce    bool                      `json:"enforce_nonce,omitempty"`    // whether to enforce the nonce (defaults to false)
 	// Poll            *tempest.Poll             `json:"poll,omitempty"`             // A poll!
-
 }

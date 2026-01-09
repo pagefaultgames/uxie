@@ -34,11 +34,16 @@ func main() {
 
 	client := commands.NewClient(httpClient, guildID)
 	if err := db.Open(); err != nil {
-		utils.ErrorAttrs("Failed to open database", slog.String("error", err.Error()))
+		utils.ErrorAttrs("Failed to open database", slog.Any("error", err))
 		panic(fmt.Sprintf("failed to open database: %v\n", err))
 	}
 
-	defer db.Close()
+	defer func() {
+		if err := db.Close(); err != nil {
+			utils.ErrorAttrs("Failed to close database", slog.Any("error", err))
+			panic(err)
+		}
+	}()
 
 	if err := client.RegisterDefaultCommands(); err != nil {
 		utils.ErrorAttrs("Failed to register default commands", slog.String("error", err.Error()))
