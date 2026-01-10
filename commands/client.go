@@ -6,6 +6,7 @@ import (
 	"github.com/amatsagu/tempest"
 )
 
+// A Client is a basic wrapper around a Tempest HTTP client.
 type Client struct {
 	*tempest.HTTPClient
 
@@ -14,12 +15,8 @@ type Client struct {
 
 var GlobalClient *Client
 
-// NewClient creates a new Command Client wrapping the given Tempest HTTP client and guild ID.
-
+// NewClient creates a new Client wrapping the given Tempest HTTP client and guild ID.
 func NewClient(httpClient *tempest.HTTPClient, guildID tempest.Snowflake) *Client {
-	if GlobalClient != nil {
-		return GlobalClient
-	}
 	GlobalClient = &Client{
 		HTTPClient: httpClient,
 		guildID:    guildID,
@@ -34,5 +31,6 @@ func (c *Client) RegisterDefaultCommands() error {
 			return fmt.Errorf("failed to register command %s: %w", cmd.Name, err)
 		}
 	}
-	return nil
+
+	return c.SyncCommandsWithDiscord([]tempest.Snowflake{c.guildID}, nil, false)
 }

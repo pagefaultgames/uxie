@@ -27,7 +27,7 @@ func main() {
 		utils.ErrorAttrs(
 			"Failed to parse guild ID env var",
 			slog.String("env var", os.Getenv("DISCORD_GUILD_ID")),
-			slog.String("error", err.Error()),
+			slog.Any("error", err),
 		)
 		panic(fmt.Sprintf("failed to parse guild ID env variable: %v\n", err))
 	}
@@ -46,7 +46,7 @@ func main() {
 	}()
 
 	if err := client.RegisterDefaultCommands(); err != nil {
-		utils.ErrorAttrs("Failed to register default commands", slog.String("error", err.Error()))
+		utils.ErrorAttrs("Failed to register default commands", slog.Any("error", err))
 		panic(fmt.Sprintf("failed to register default commands: %v\n", err))
 	}
 

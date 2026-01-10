@@ -5,15 +5,16 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"time"
 
 	"github.com/amatsagu/tempest"
 	"github.com/pagefaultgames/oranguru/db"
-	"github.com/pagefaultgames/oranguru/types"
 	"github.com/pagefaultgames/oranguru/utils"
 )
 
 const (
-	addHelpModalNameInputId = "addHelpModalNameInput"
+	// ID for the "choose title/desc" input modal
+	addHelpModalId          = "addHelpModalNameInput"
 	addHelpModalTextInputId = "addHelpModalTextInput"
 	addHelpModalDescInputId = "addHelpModalDescInput"
 )
@@ -21,60 +22,47 @@ const (
 var addHelp = Command{
 	Command: tempest.Command{
 		Name:                "add-help",
-		Description:         "Add a new help topic.",
+		Description:         "Add a new help topic or update an existing one.",
 		Type:                tempest.CHAT_INPUT_COMMAND_TYPE,
 		SlashCommandHandler: handleAddHelp,
-	},
-
-	handlers: map[string]modalHandler{
-		addHelpModalNameInputId: handleAddHelpName,
+		Options: []tempest.CommandOption{
+			{
+				Type:        tempest.STRING_OPTION_TYPE,
+				Name:        "topic",
+				Description: "The name of the help topic to create or update.",
+				Required:    true,
+				MinLength:   1,
+				MaxLength:   100,
+			},
+		},
 	},
 }
 
 func handleAddHelp(ctx *tempest.CommandInteraction) {
-	if err := utils.SendDiscordMessage(ctx.HTTPClient, ctx.ChannelID,
-		types.CreateMessageParams{
-			Flags:   tempest.EPHEMERAL_MESSAGE_FLAG,
-			Content: "What help topic would you like to add?",
-			Components: []tempest.LayoutComponent{
-				tempest.ContainerComponent{
-					Type: tempest.CONTAINER_COMPONENT_TYPE,
-					Components: []tempest.AnyComponent{
-						tempest.LabelComponent{
-							Type:        tempest.LABEL_COMPONENT_TYPE,
-							Label:       "What should the command be named?",
-							Description: "Keep it short and simple!",
-							Component: tempest.TextInputComponent{
-								CustomID:    addHelpModalNameInputId,
-								Type:        tempest.TEXT_INPUT_COMPONENT_TYPE,
-								Style:       tempest.SHORT_TEXT_INPUT_STYLE,
-								MaxLength:   100,
-								Required:    true,
-								Placeholder: "Enter the name of the help topic to add.",
-							},
-						},
-					},
-				},
-			},
-		}, nil); err != nil {
-		utils.ErrorAttrs("Failed to send help name modal", slog.String("error", err.Error()))
-		_, _ = ctx.SendLinearFollowUp("error: Failed to create help topic: "+err.Error(), true)
-		return
-	}
+	opt, found := ctx.GetOptionValue("topic")
+	topic, ok := opt.(string)
 
-	utils.InfoAttrs("Sent add-help modal to user", slog.String("username", ctx.User.Username))
-}
-
-func handleAddHelpName(mtx tempest.ModalInteraction) {
-	topic := getTextInputValue(&mtx, addHelpModalNameInputId)
-
-	if topic == "" {
-		utils.ErrorAttrs("Failed to get name of add-help modal",
-			slog.String("username", mtx.User.Username),
-			slog.Uint64("ID", uint64(mtx.ID)),
+	if !ok {
+		utils.ErrorAttrs("Invalid type for add-help topic option",
+			slog.String("username", ctx.User.Username),
+			slog.Any("topic", opt),
+			slog.Uint64("ID", uint64(ctx.ID)),
 		)
-		_, _ = mtx.SendLinearFollowUp(
-			"error: Failed to create help topic: invalid submission",
+		_, _ = ctx.SendLinearFollowUp(
+			fmt.Sprintf(
+				"Error: Help topic was of incorrect type (expected string, received %T)!",
+				opt,
+			),
+			true,
+		)
+		return
+	} else if topic == "" || !found {
+		utils.ErrorAttrs("Empty topic provided to add-help command",
+			slog.String("username", ctx.User.Username),
+			slog.Uint64("ID", uint64(ctx.ID)),
+		)
+		_, _ = ctx.SendLinearFollowUp(
+			"Error: Help topic cannot be empty!",
 			true,
 		)
 		return
@@ -87,23 +75,21 @@ func handleAddHelpName(mtx tempest.ModalInteraction) {
 	// Check if the command already exists, pre-filling the body if it does
 	existing, err := db.HelpTopics.GetHelpTopic(topic)
 	if errors.Is(err, sql.ErrNoRows) {
-		utils.InfoAttrs("Editing existing help topic", slog.String("topic", topic))
 		description, body = existing.Description, existing.Text
 		modalTitle = fmt.Sprintf("Edit existing help topic %s", topic)
 	} else if err != nil {
 		utils.ErrorAttrs("Failed to check for existing help topic",
-			slog.String("username", mtx.User.Username),
+			slog.String("username", ctx.User.Username),
 			slog.String("name", topic),
-			slog.Uint64("ID", uint64(mtx.ID)),
+			slog.Uint64("ID", uint64(ctx.ID)),
 			slog.Any("error", err),
 		)
-		_, _ = mtx.SendLinearFollowUp("error: Failed to check topic existence: "+err.Error(), true)
+		_, _ = ctx.SendLinearFollowUp("Error: Failed to check topic existence: "+err.Error(), true)
 		return
 	}
 
-	if err := mtx.AcknowledgeWithModal(tempest.ResponseModalData{
-		Title:    modalTitle,
-		CustomID: "FOOOOOo",
+	if err := ctx.SendModal(tempest.ResponseModalData{
+		Title: modalTitle,
 		Components: []tempest.LayoutComponent{
 			tempest.ContainerComponent{
 				Type: tempest.CONTAINER_COMPONENT_TYPE,
@@ -135,41 +121,79 @@ func handleAddHelpName(mtx tempest.ModalInteraction) {
 		},
 	}); err != nil {
 		utils.ErrorAttrs("Failed to send help topic modal 2",
-			slog.String("username", mtx.User.Username),
-			slog.String("name", topic),
-			slog.Uint64("ID", uint64(mtx.ID)),
+			slog.String("username", ctx.User.Username),
+			slog.String("topic", topic),
+			slog.Uint64("ID", uint64(ctx.ID)),
 			slog.Any("error", err),
 		)
-		_, _ = mtx.SendLinearFollowUp("error: Failed to send modal: "+err.Error(), true)
+		_, _ = ctx.SendLinearFollowUp("error: Failed to send modal: "+err.Error(), true)
 		return
 	}
-	if err := mtx.BaseClient.RegisterModal("FOOOOOo", func(mtx tempest.ModalInteraction) {
-		description := getTextInputValue(&mtx, addHelpModalDescInputId)
-		text := getTextInputValue(&mtx, addHelpModalTextInputId)
-		fmt.Println(description, text)
-	}); err != nil {
-		utils.ErrorAttrs("Failed to register help topic modal handler",
-			slog.String("username", mtx.User.Username),
-			slog.String("name", topic),
-			slog.Uint64("ID", uint64(mtx.ID)),
+
+	// Wait for either 15 minutes to pass or the modal to be submitted inside another goroutine
+	timeout := time.After(15 * time.Minute)
+	response, cancel, err := ctx.HTTPClient.AwaitModal([]string{addHelpModalId})
+	if err != nil {
+		utils.ErrorAttrs("Failed to await help topic modal response",
+			slog.String("username", ctx.User.Username),
+			slog.String("topic", topic),
+			slog.Uint64("ID", uint64(ctx.ID)),
 			slog.Any("error", err),
 		)
-		_, _ = mtx.SendLinearFollowUp("error: Failed to register modal handler: "+err.Error(), true)
+		_, _ = ctx.SendLinearFollowUp("error: Failed to wait for modal: "+err.Error(), true)
 		return
 	}
+
+	go func() {
+		defer cancel()
+		select {
+		case <-timeout:
+			utils.InfoAttrs("Waiting for response timed out after 15 minutes!",
+				slog.String("username", ctx.User.Username),
+				slog.String("topic", topic),
+				slog.Uint64("ID", uint64(ctx.ID)),
+			)
+			_, _ = ctx.SendLinearFollowUp("Modal timed out after 15 minutes.", true)
+		case mtx := <-response:
+			addHelpTopic(mtx, topic)
+		}
+	}()
 }
 
-func addHelpTopic(mtx *tempest.ModalInteraction, name, description, text string) error {
-	if err := db.HelpTopics.AddHelpTopic(name, description, text); err != nil {
+func addHelpTopic(mtx *tempest.ModalInteraction, topic string) {
+	description := getTextInputValue(mtx, addHelpModalDescInputId)
+	if description == "" {
+		utils.ErrorAttrs("Description input not found in add-help modal",
+			slog.String("username", mtx.User.Username),
+			slog.String("name", topic),
+			slog.Uint64("ID", uint64(mtx.ID)),
+		)
+
+		_, _ = mtx.SendLinearFollowUp("Error: Description input cannot be empty!", true)
+		return
+	}
+
+	text := getTextInputValue(mtx, addHelpModalTextInputId)
+	if text == "" {
+		utils.ErrorAttrs("Text input not found in add-help modal",
+			slog.String("username", mtx.User.Username),
+			slog.String("name", topic),
+			slog.Uint64("ID", uint64(mtx.ID)),
+		)
+
+		_, _ = mtx.SendLinearFollowUp("Error: Text input cannot be empty!", true)
+		return
+	}
+
+	if err := db.HelpTopics.AddHelpTopic(topic, description, text); err != nil {
 		utils.ErrorAttrs("Failed to register new help topic in database",
 			slog.String("username", mtx.User.Username),
-			slog.String("name", name),
+			slog.String("name", topic),
 			slog.String("description", description),
 			slog.String("text", text),
 			slog.Uint64("ID", uint64(mtx.ID)),
 			slog.Any("error", err),
 		)
-		return err
+		_, _ = mtx.SendLinearFollowUp("Error: could not store help topic in database", true)
 	}
-	return nil
 }

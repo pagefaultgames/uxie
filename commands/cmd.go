@@ -14,9 +14,10 @@ type modalHandler = func(mtx tempest.ModalInteraction)
 type Command struct {
 	tempest.Command
 
-	// Any handlers this command has for its modals.
+	// Any handlers this command has for its modals, mapped to their respective custom IDs.
 	// A nil or empty map signifies no modals.
-	handlers map[string]modalHandler
+	// Note that this must contain handlers for **all modals** used by this command, even ones created dynamically.
+	modalHandlers map[string]modalHandler
 }
 
 func (c *Command) Register(client *tempest.HTTPClient) error {
@@ -25,7 +26,7 @@ func (c *Command) Register(client *tempest.HTTPClient) error {
 		return fmt.Errorf("failed to register command: %w", err)
 	}
 
-	for cid, handler := range c.handlers {
+	for cid, handler := range c.modalHandlers {
 		if err := client.RegisterModal(cid, handler); err != nil {
 			utils.ErrorAttrs("Failed to register command modal",
 				slog.String("command", c.Name),
