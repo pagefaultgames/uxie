@@ -35,7 +35,7 @@ func handleHelpAutocomplete(ctx tempest.CommandInteraction) []tempest.CommandOpt
 
 	// should always be a string
 	_, t := ctx.GetFocusedValue()
-	// nolint:errcheck
+	//nolint:errcheck
 	focused := t.(string)
 
 	choices := make([]tempest.CommandOptionChoice, 0, len(topics))
