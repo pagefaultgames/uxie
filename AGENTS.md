@@ -7,5 +7,6 @@
 ## Important commands
 
 - `task lint`/`task fmt` - Run linters/formatting
-  - Should be done before EVERY commit!
+  - Should be done after EVERY commit!
+  - **Do NOT use `gofmt`**; it does not support additional linting directives
 - `task test` - Run automated tests

@@ -73,7 +73,7 @@ func handleAddHelp(ctx *tempest.CommandInteraction) {
 		modalTitle        = fmt.Sprintf("Create new help topic %s", topic)
 	)
 	// Check if the command already exists, pre-filling the body if it does
-	existing, err := db.HelpTopics.GetHelpTopic(topic)
+	existing, err := db.GetHelpTopic(topic)
 	if errors.Is(err, sql.ErrNoRows) {
 		description, body = existing.Description, existing.Text
 		modalTitle = fmt.Sprintf("Edit existing help topic %s", topic)
@@ -185,7 +185,7 @@ func addHelpTopic(mtx *tempest.ModalInteraction, topic string) {
 		return
 	}
 
-	if err := db.HelpTopics.AddHelpTopic(topic, description, text); err != nil {
+	if err := db.AddHelpTopic(topic, description, text); err != nil {
 		utils.ErrorAttrs("Failed to register new help topic in database",
 			slog.String("username", mtx.User.Username),
 			slog.String("name", topic),
