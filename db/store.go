@@ -24,14 +24,14 @@ type statementName string
 
 const (
 	// Get a single help topic.
-	//  `SELECT description, text, id FROM topics WHERE name = ?1`
+	//  `SELECT id, text FROM topics WHERE name = ?1`
 	getHelpTopic statementName = "getHelpTopic"
 	// Get all help topics.
-	//  `SELECT id, name, description, text FROM topics`
+	//  `SELECT id, name, text FROM topics`
 	getAllTopics statementName = "getAllTopics"
 	// Add or update a help topic.
-	//  `INSERT INTO topics (name, description, text) VALUES (?1, ?2, ?3)
-	//  ON CONFLICT DO UPDATE SET description = excluded.description, text = excluded.text`
+	//  `INSERT INTO topics (name, text) VALUES (?1, ?2)
+	//  ON CONFLICT DO UPDATE SET text = excluded.text`
 	addHelpTopic statementName = "addHelpTopic"
 	// Delete a help topic.
 	//  `DELETE FROM topics WHERE name = ?1 RETURNING id`
@@ -45,8 +45,6 @@ type topicId = int64
 type HelpTopic struct {
 	// The topic's name.
 	Name string
-	// The topic's description.
-	Description string
 	// The topic's text.
 	Text string
 	// The topic's internal ID.
@@ -59,7 +57,6 @@ func (s *Store) init() error {
 		CREATE TABLE IF NOT EXISTS topics (
 			id          INTEGER PRIMARY KEY,
 			name        VARCHAR NOT NULL UNIQUE,
-			description VARCHAR NOT NULL,
 			text        VARCHAR NOT NULL,
 		);
 	`); err != nil {
@@ -72,22 +69,22 @@ func (s *Store) init() error {
 func (s *Store) prepareStatements() (err error) {
 	s.statements = make(map[statementName]*sql.Stmt, 3)
 	s.statements[getHelpTopic], err = s.db.Prepare(`
-		SELECT description, text, id FROM topics WHERE name = ?1
+		SELECT  id, text FROM topics WHERE name = ?1
 	`)
 	if err != nil {
 		return fmt.Errorf("failed to prepare getHelpTopic statement: %w", err)
 	}
 
 	s.statements[addHelpTopic], err = s.db.Prepare(`
-		INSERT INTO topics (name, description, text) VALUES (?1, ?2, ?3)
-		ON CONFLICT DO UPDATE SET description = excluded.description, text = excluded.text
+		INSERT INTO topics (name, text) VALUES (?1, ?2)
+		ON CONFLICT DO UPDATE SET text = excluded.text
 	`)
 	if err != nil {
 		return fmt.Errorf("failed to prepare addHelpTopic statement: %w", err)
 	}
 
 	s.statements[getAllTopics], err = s.db.Prepare(`
-		SELECT id, name, description, text FROM topics
+		SELECT id, name, text FROM topics
 	`)
 	if err != nil {
 		return fmt.Errorf("failed to prepare getAllTopics statement: %w", err)
@@ -127,18 +124,17 @@ func (s *Store) close() (err error) {
 
 func (s *Store) getHelpTopic(name string) (topic *HelpTopic, err error) {
 	var (
-		cid        topicId
-		desc, text string
+		cid  topicId
+		text string
 	)
-	err = s.statements[getHelpTopic].QueryRow(name).Scan(&desc, &text, &cid)
+	err = s.statements[getHelpTopic].QueryRow(name).Scan(&cid, &text)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get help topic %s: %w", name, err)
 	}
 	return &HelpTopic{
-		id:          cid,
-		Name:        name,
-		Description: desc,
-		Text:        text,
+		id:   cid,
+		Name: name,
+		Text: text,
 	}, nil
 }
 
@@ -156,27 +152,25 @@ func (s *Store) getAllTopics() (topics []HelpTopic, err error) {
 
 	for rows.Next() {
 		var (
-			id          topicId
-			name        string
-			description string
-			text        string
+			id   topicId
+			name string
+			text string
 		)
-		if serr := rows.Scan(&id, &name, &description, &text); serr != nil {
+		if serr := rows.Scan(&id, &name, &text); serr != nil {
 			return nil, fmt.Errorf("failed to scan help topic row: %w", serr)
 		}
 		topics = append(topics, HelpTopic{
-			id:          id,
-			Name:        name,
-			Description: description,
-			Text:        text,
+			id:   id,
+			Name: name,
+			Text: text,
 		})
 	}
 
 	return topics, rows.Err()
 }
 
-func (s *Store) addHelpTopic(name, description, text string) error {
-	_, err := s.statements[addHelpTopic].Exec(name, description, text)
+func (s *Store) addHelpTopic(name, text string) error {
+	_, err := s.statements[addHelpTopic].Exec(name, text)
 	if err != nil {
 		return fmt.Errorf("failed to add help topic %s to database: %w", name, err)
 	}

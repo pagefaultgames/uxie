@@ -41,10 +41,12 @@ func Close() error {
 	return err
 }
 
+var errNoDB = errors.New("database not initialized")
+
 // Internal helper function to get the global DB store.
 func getStore() (*Store, error) {
 	if helpTopics == nil || helpTopics.db == nil {
-		return nil, errors.New("database not initialized")
+		return nil, errNoDB
 	}
 
 	return helpTopics, nil
@@ -74,13 +76,13 @@ func GetAllTopics() ([]HelpTopic, error) {
 // AddHelpTopic adds a new help topic to the database.
 // If a topic with the same name already exists, it will be overwritten.
 // (This technically makes it an UPSERT operation.)
-func AddHelpTopic(name, description, text string) error {
+func AddHelpTopic(name, text string) error {
 	store, err := getStore()
 	if err != nil {
 		return err
 	}
 
-	return store.addHelpTopic(name, description, text)
+	return store.addHelpTopic(name, text)
 }
 
 // DeleteTopic deletes the named help topic, returning whether a topic was deleted and any error produced.

@@ -1,10 +1,13 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"log/slog"
 	"net/http"
 	"os"
+	"os/signal"
+	"time"
 
 	"github.com/amatsagu/tempest"
 	"github.com/pagefaultgames/oranguru/commands"
@@ -32,7 +35,7 @@ func main() {
 		panic(fmt.Sprintf("failed to parse guild ID env variable: %v\n", err))
 	}
 
-	client := commands.NewClient(httpClient, guildID)
+	client := commands.NewClient(httpClient)
 	if err := db.Open(); err != nil {
 		utils.ErrorAttrs("Failed to open database", slog.Any("error", err))
 		panic(fmt.Sprintf("failed to open database: %v\n", err))
@@ -45,16 +48,38 @@ func main() {
 		}
 	}()
 
-	if err := client.RegisterDefaultCommands(); err != nil {
+	if err := client.RegisterDefaultCommands(guildID); err != nil {
 		utils.ErrorAttrs("Failed to register default commands", slog.Any("error", err))
 		panic(fmt.Sprintf("failed to register default commands: %v\n", err))
 	}
 
-	http.HandleFunc("POST /discord/callback", httpClient.DiscordRequestHandler)
+	serveHTTP(addr, client)
+}
 
-	slog.Info("Serving application at: " + addr + "/discord/callback\n")
+func serveHTTP(addr string, client *commands.Client) {
+	http.HandleFunc("POST /discord/callback", client.DiscordRequestHandler)
 
-	if err = http.ListenAndServe(addr, nil); err != nil {
-		utils.ErrorAttrs("the shit has hit the fan", slog.Any("error", err))
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, os.Kill)
+
+	server := &http.Server{Addr: addr}
+	slog.Info("Serving application at: " + addr + "/discord/callback")
+
+	go func() {
+		if err := server.ListenAndServe(); err != http.ErrServerClosed {
+			utils.ErrorAttrs("error during HTTP serving", slog.Any("error", err))
+		}
+		stop()
+	}()
+
+	<-ctx.Done()
+	stop()
+	slog.Info("Termination signal received, shutting down gracefully...")
+
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	if err := server.Shutdown(shutdownCtx); err != nil {
+		utils.ErrorAttrs("error shutting down server", slog.Any("error", err))
 	}
+
+	slog.Info("Server shut down successfully")
 }
