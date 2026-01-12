@@ -1,0 +1,45 @@
+#:schema https://json.schemastore.org/any.json
+
+# Working directory
+root = "."
+tmp_dir = "tmp"
+
+[build]
+# Just plain old shell command. You could use `make` as well.
+cmd = "go build -o ./tmp/main ."
+# Entrypoint binary relative to root. First item is the executable, more items are default arguments.
+entrypoint = ["./tmp/main"]
+# Customize binary, can setup environment variables when run your app.
+full_bin = "APP_ENV=dev APP_USER=air ./tmp/main"
+# Watch these filename extensions. Use ["*"] to watch all file extensions.
+include_ext = ["go"]
+# Exclude specific regular expressions.
+exclude_regex = ["_test\\.go"]
+exclude_unchanged = true
+follow_symlink = true
+log = "air.log"
+# Poll files for changes instead of using fsnotify.
+poll = false
+# Poll interval (defaults to the minimum interval of 500ms).
+poll_interval = 500 # ms
+
+delay = 50
+
+stop_on_error = true
+
+send_interrupt = true
+
+kill_delay = 500
+
+[color]
+main = "magenta"
+watcher = "cyan"
+build = "yellow"
+runner = "green"
+
+[misc]
+clean_on_exit = true
+
+[screen]
+clear_on_rebuild = true
+keep_scroll = true

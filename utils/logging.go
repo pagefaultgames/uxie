@@ -54,7 +54,7 @@ func setLoggerDest(path string) error {
 func init() {
 	file, found := os.LookupEnv("LOG_FILE")
 	if !found {
-		file = "logs/oranguru.log"
+		file = "tmp/logs/oranguru.log"
 	}
 	if err := setLoggerDest(file); err != nil {
 		panic("failed to set default log destination: " + err.Error())

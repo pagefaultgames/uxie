@@ -43,6 +43,11 @@ tasks:
 
     method: none
 
+  air:
+    desc: Setup hot reload with air
+    cmd: go tool github.com/air-verse/air
+    method: none
+
   test:
     desc: Run backend tests with environment-aware defaults.
     cmd: source ./tasks/test.sh {{.CLI_ARGS}}
