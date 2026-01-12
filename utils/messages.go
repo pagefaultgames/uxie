@@ -1,4 +1,4 @@
-package commands
+package utils
 
 import (
 	"errors"
@@ -8,35 +8,55 @@ import (
 
 	"github.com/amatsagu/tempest"
 	"github.com/pagefaultgames/oranguru/types"
-	"github.com/pagefaultgames/oranguru/utils"
 )
 
-// getTextInputValue is a helper function to extract a text input modal's value from within a label.
-// It returns the text contents, or an empty string if absent.
-func getTextInputValue(
+// GetTextInputValue is a helper function to recursively search through one or more components
+// to find a text input component with the given custom ID.
+// It returns the text contents of the first match, or an empty string if absent.
+func GetTextInputValue(
 	mtx *tempest.ModalInteraction,
 	customId string,
 ) (contents string) {
 	for _, comp := range mtx.Data.Components {
-		label, ok := comp.(tempest.LabelComponent)
-		if !ok {
-			continue
+		if res := checkComponent(comp, customId); res != "" {
+			return res
 		}
-
-		c, found := label.Component.(tempest.TextInputComponent)
-		if !found || c.CustomID != customId {
-			continue
-		}
-		return c.Value
 	}
 	return ""
 }
 
-// validateOptionValue is a helper function to extract and validate a command option's value type.
-// It returns the value and whether it was found and of the correct type.
+// checkComponent is a recursive helper function to search through a component and its descendants
+// for a text input component with the given custom ID.
+// It returns the text contents of the first match, or an empty string if absent.
+func checkComponent(c tempest.AnyComponent, customId string) (contents string) {
+	switch comp := c.(type) {
+	case tempest.LabelComponent:
+		return checkComponent(comp.Component, customId)
+	case tempest.ActionRowComponent:
+		for _, subComp := range comp.Components {
+			if res := checkComponent(subComp, customId); res != "" {
+				return res
+			}
+		}
+	case tempest.ContainerComponent:
+		for _, subComp := range comp.Components {
+			if res := checkComponent(subComp, customId); res != "" {
+				return res
+			}
+		}
+	case tempest.TextInputComponent:
+		if comp.CustomID == customId {
+			return comp.Value
+		}
+	}
+	return ""
+}
+
+// ValidateOptionValue is a helper function to extract and validate a command option's value type.
+// It returns the value (which will be zero if not found) and whether the value was found and of the correct type.
 // This function performs necessary logging and error messaging on failure, so callers can simply return
 // if ok is false.
-func validateOptionValue[T string | bool | float64](
+func ValidateOptionValue[T string | bool | float64](
 	ctx *tempest.CommandInteraction,
 	optName string,
 ) (topic T, ok bool) {
@@ -47,9 +67,9 @@ func validateOptionValue[T string | bool | float64](
 
 	topic, ok = opt.(T)
 	if !ok {
-		utils.ErrorAttrs(
+		ErrorAttrs(
 			fmt.Sprintf("Invalid input type for %s command option %s!", ctx.Data.Name, optName),
-			// slog.String("username", ctx.User.Username),
+			slog.String("username", ctx.BaseUser().Username),
 			slog.String("type", fmt.Sprintf("%T", opt)),
 			slog.Uint64("ID", uint64(ctx.ID)),
 		)
@@ -67,6 +87,7 @@ func validateOptionValue[T string | bool | float64](
 	return topic, ok
 }
 
+// can
 type canSendLinearFollowUp interface {
 	SendLinearFollowUp(content string, ephemeral bool) (tempest.Message, error)
 }
@@ -78,8 +99,8 @@ var (
 	_ canSendLinearFollowUp = (*tempest.ModalInteraction)(nil)
 )
 
-// sendErrorFollowUp is a helper function to send a standardized error follow-up message.
-func sendErrorFollowUp[T canSendLinearFollowUp](ctx T, msg string, err error) {
+// SendErrorFollowUp is a helper function to send a standardized error follow-up message.
+func SendErrorFollowUp[T canSendLinearFollowUp](ctx T, msg string, err error) {
 	_, _ = ctx.SendLinearFollowUp(msg+"\nError:\n```\n"+err.Error()+"\n```", true)
 }
 
@@ -90,7 +111,7 @@ var (
 	)
 )
 
-// sendReplacementMessage deletes the original target message used for a slash command
+// SendReplacementMessage deletes the original target message used for a slash command
 // and sends a new message in its place with the given content.
 // It returns the first error encountered.
 //
@@ -98,7 +119,7 @@ var (
 //   - AllowedMentions will be set to prevent any mentions from pinging anyone.
 //   - MessageReference will be set to match the original message's reference.
 //   - Flags will have SUPPRESS_NOTIFICATIONS set.
-func sendReplacementMessage(
+func SendReplacementMessage(
 	ctx *tempest.CommandInteraction,
 	message types.CreateMessageParams,
 ) (err error) {

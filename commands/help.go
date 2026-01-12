@@ -37,7 +37,7 @@ func handleHelpAutocomplete(ctx tempest.CommandInteraction) []tempest.CommandOpt
 	focusedText, ok := f.(string)
 	if !ok {
 		utils.ErrorAttrs("Invalid type for help topic autocomplete option",
-			// slog.String("username", ctx.User.Username),
+			slog.String("username", ctx.BaseUser().Username),
 			slog.Uint64("ID", uint64(ctx.ID)),
 			slog.String("command_name", ctx.Data.Name),
 			slog.Any("topic", f),
@@ -48,7 +48,7 @@ func handleHelpAutocomplete(ctx tempest.CommandInteraction) []tempest.CommandOpt
 	topics, err := db.GetAllTopics()
 	if err != nil {
 		utils.ErrorAttrs("error fetching topics from database for autocomplete",
-			// slog.String("username", ctx.User.Username),
+			slog.String("username", ctx.BaseUser().Username),
 			slog.Uint64("ID", uint64(ctx.ID)),
 			slog.String("command_name", ctx.Data.Name),
 			slog.Any("error", err),
@@ -75,7 +75,7 @@ func handleHelpAutocomplete(ctx tempest.CommandInteraction) []tempest.CommandOpt
 }
 
 func showHelpTopic(ctx *tempest.CommandInteraction) {
-	opt, found := validateOptionValue[string](ctx, "topic")
+	opt, found := utils.ValidateOptionValue[string](ctx, "topic")
 	if !found {
 		return
 	}
@@ -86,12 +86,12 @@ func showHelpTopic(ctx *tempest.CommandInteraction) {
 		return
 	} else if err != nil {
 		utils.ErrorAttrs("Failed to retrieve help topic from database",
-			// slog.String("username", ctx.User.Username),
+			slog.String("username", ctx.BaseUser().Username),
 			slog.String("name", opt),
 			slog.Uint64("ID", uint64(ctx.ID)),
 			slog.Any("error", err),
 		)
-		sendErrorFollowUp(
+		utils.SendErrorFollowUp(
 			ctx,
 			fmt.Sprintf("Could not retrieve help topic %s from database!", opt),
 			err,
@@ -100,17 +100,17 @@ func showHelpTopic(ctx *tempest.CommandInteraction) {
 	}
 
 	// Send the actual message
-	if err := sendReplacementMessage(ctx, types.CreateMessageParams{
+	if err := utils.SendReplacementMessage(ctx, types.CreateMessageParams{
 		Content: fmt.Sprintf("**%s**\n\n%s", topic.Name, topic.Text),
 	}); err != nil {
 		utils.ErrorAttrs("Failed to send help topic message",
-			// slog.String("username", ctx.User.Username),
+			slog.String("username", ctx.BaseUser().Username),
 			slog.String("name", opt),
 			slog.Uint64("ID", uint64(ctx.ID)),
 			slog.Any("error", err),
 		)
 
-		sendErrorFollowUp(
+		utils.SendErrorFollowUp(
 			ctx,
 			fmt.Sprintf("Could not send help topic message %s!", opt),
 			err,

@@ -1,0 +1,15 @@
+{
+  "$schema": "https://raw.githubusercontent.com/evilmartians/lefthook/32a3e5d1627ff2933f7380107d5480e81fa0e6d1/schema.json",
+  "assert_lefthook_installed": true,
+  "pre-commit": {
+    "parallel": true,
+    "skip": ["merge", "rebase"],
+    "jobs": [
+      {
+        "name": "Lint Go code",
+        "run": "task lint -- {staged_files}",
+        "stage_fixed": true
+      }
+    ]
+  }
+}

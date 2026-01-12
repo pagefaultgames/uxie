@@ -41,7 +41,7 @@ func handleAddHelp(ctx *tempest.CommandInteraction) {
 	utils.InfoAttrs("handling add help")
 	_ = ctx.DeleteReply()
 
-	topic, found := validateOptionValue[string](ctx, "topic")
+	topic, found := utils.ValidateOptionValue[string](ctx, "topic")
 	if !found {
 		return
 	}
@@ -58,13 +58,13 @@ func handleAddHelp(ctx *tempest.CommandInteraction) {
 		modalTitle = fmt.Sprintf("Edit existing help topic %s", topic)
 	} else if !errors.Is(err, sql.ErrNoRows) {
 		utils.ErrorAttrs("Failed to check for existing help topic in database",
-			// slog.String("username", ctx.User.Username),
+			slog.String("username", ctx.BaseUser().Username),
 			slog.String("command_name", ctx.Data.Name),
 			slog.String("name", topic),
 			slog.Uint64("ID", uint64(ctx.ID)),
 			slog.Any("error", err),
 		)
-		sendErrorFollowUp(
+		utils.SendErrorFollowUp(
 			ctx,
 			"Could not check check existence of help topic "+topic+"!",
 			err,
@@ -72,7 +72,11 @@ func handleAddHelp(ctx *tempest.CommandInteraction) {
 		return
 	}
 
-	if err := ctx.SendModal(tempest.ResponseModalData{
+	sendAddHelpModal(ctx, topic, modalTitle, body)
+}
+
+func sendAddHelpModal(ctx *tempest.CommandInteraction, topic, modalTitle, body string) {
+	err := ctx.SendModal(tempest.ResponseModalData{
 		Title:    modalTitle,
 		CustomID: addHelpModalId,
 		Components: []tempest.LayoutComponent{
@@ -94,15 +98,16 @@ func handleAddHelp(ctx *tempest.CommandInteraction) {
 				},
 			},
 		},
-	}); err != nil {
+	})
+	if err != nil {
 		utils.ErrorAttrs("Failed to send add help topic modal",
-			// slog.String("username", ctx.User.Username),
+			slog.String("username", ctx.BaseUser().Username),
 			slog.String("topic", topic),
 			slog.String("command_name", ctx.Data.Name),
 			slog.Uint64("ID", uint64(ctx.ID)),
 			slog.Any("error", err),
 		)
-		sendErrorFollowUp(ctx, "Failed to send modal!", err)
+		utils.SendErrorFollowUp(ctx, "Failed to send modal!", err)
 		return
 	}
 
@@ -111,13 +116,13 @@ func handleAddHelp(ctx *tempest.CommandInteraction) {
 	response, cancel, err := ctx.HTTPClient.AwaitModal([]string{addHelpModalId})
 	if err != nil {
 		utils.ErrorAttrs("Failed to await help topic modal response",
-			// slog.String("username", ctx.User.Username),
+			slog.String("username", ctx.BaseUser().Username),
 			slog.String("topic", topic),
 			slog.String("command_name", ctx.Data.Name),
 			slog.Uint64("ID", uint64(ctx.ID)),
 			slog.Any("error", err),
 		)
-		sendErrorFollowUp(ctx, "Failed to wait for modal completion!", err)
+		utils.SendErrorFollowUp(ctx, "Failed to await modal response!", err)
 		return
 	}
 
@@ -142,10 +147,17 @@ func handleAddHelp(ctx *tempest.CommandInteraction) {
 }
 
 func addHelpTopic(mtx *tempest.ModalInteraction, topic string) {
-	text := getTextInputValue(mtx, addHelpModalTextInputId)
+	if mtx == nil {
+		utils.ErrorAttrs("Modal interaction is nil in addHelpTopic!",
+			slog.String("topic", topic),
+		)
+		return
+	}
+
+	text := utils.GetTextInputValue(mtx, addHelpModalTextInputId)
 	if text == "" {
 		utils.ErrorAttrs("Text input not found in add-help modal",
-			slog.String("username", mtx.User.Username),
+			slog.String("username", mtx.BaseUser().Username),
 			slog.String("topic", topic),
 			slog.Uint64("ID", uint64(mtx.ID)),
 		)
@@ -156,13 +168,13 @@ func addHelpTopic(mtx *tempest.ModalInteraction, topic string) {
 
 	if err := db.AddHelpTopic(topic, text); err != nil {
 		utils.ErrorAttrs("Failed to register new help topic in database",
-			slog.String("username", mtx.User.Username),
+			slog.String("username", mtx.BaseUser().Username),
 			slog.String("topic", topic),
 			slog.String("text", text),
 			slog.Uint64("ID", uint64(mtx.ID)),
 			slog.Any("error", err),
 		)
-		sendErrorFollowUp(mtx, "Could not add help topic to database!", err)
+		utils.SendErrorFollowUp(mtx, "Could not add help topic to database!", err)
 	}
 
 	_, _ = mtx.SendLinearFollowUp(fmt.Sprintf("Help topic %s added successfully!", topic), true)
