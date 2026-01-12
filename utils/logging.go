@@ -3,7 +3,6 @@ package utils
 import (
 	"context"
 	"fmt"
-	"io"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -47,7 +46,7 @@ func setLoggerDest(path string) error {
 		return fmt.Errorf("error creating output file %s: %w", path, err)
 	}
 
-	slog.SetDefault(slog.New(slog.NewTextHandler(io.MultiWriter(outFile, os.Stdout), nil)))
+	slog.SetDefault(slog.New(slog.NewTextHandler(outFile, nil)))
 	return nil
 }
 

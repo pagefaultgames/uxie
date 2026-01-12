@@ -9,21 +9,18 @@ tmp_dir = "tmp"
 cmd = "go build -o ./tmp/main ."
 # Entrypoint binary relative to root. First item is the executable, more items are default arguments.
 entrypoint = ["./tmp/main"]
-# Customize binary, can setup environment variables when run your app.
-full_bin = "APP_ENV=dev APP_USER=air ./tmp/main"
 # Watch these filename extensions. Use ["*"] to watch all file extensions.
 include_ext = ["go"]
 # Exclude specific regular expressions.
 exclude_regex = ["_test\\.go"]
 exclude_unchanged = true
 follow_symlink = true
-log = "air.log"
 # Poll files for changes instead of using fsnotify.
 poll = false
 # Poll interval (defaults to the minimum interval of 500ms).
-poll_interval = 500 # ms
+poll_interval = 500
 
-delay = 50
+delay = 7_500
 
 stop_on_error = true
 

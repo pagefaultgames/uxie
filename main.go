@@ -15,21 +15,30 @@ import (
 	"github.com/pagefaultgames/oranguru/utils"
 )
 
+const (
+	// os.Getenv("DISCORD_BOT_TOKEN")
+	DISCORD_BOT_TOKEN = "MTQ2MDExODAzMjE0MjY5NjUxMA.Gqitss.QCDPINoSHlYuuKpWcd_HNBimSDGEQnuA-b9ZYE"
+	// os.Getenv("DISCORD_PUBLIC_KEY")
+	DISCORD_PUBLIC_KEY = "c4151319f2cd857e73153949f58dd05151cd4363f42201051c7c004ece35787d"
+
+	DISCORD_GUILD_ID = "1460127335649902592"
+
+	ADDRESS = "localhost:8080"
+)
+
 func main() {
 	slog.Info("Creating new Tempest client...")
 	httpClient := tempest.NewHTTPClient(tempest.HTTPClientOptions{
 		BaseClientOptions: tempest.BaseClientOptions{
-			Token: os.Getenv("DISCORD_BOT_TOKEN"),
+			Token: DISCORD_BOT_TOKEN,
 		},
-		PublicKey: os.Getenv("DISCORD_PUBLIC_KEY"),
+		PublicKey: DISCORD_PUBLIC_KEY,
 	})
 
-	addr := os.Getenv("LISTENING_ADDRESS")
-	guildID, err := tempest.StringToSnowflake(os.Getenv("DISCORD_GUILD_ID"))
+	guildID, err := tempest.StringToSnowflake(DISCORD_GUILD_ID)
 	if err != nil {
 		utils.ErrorAttrs(
-			"Failed to parse guild ID env var",
-			slog.String("env var", os.Getenv("DISCORD_GUILD_ID")),
+			"Failed to parse guild ID "+DISCORD_GUILD_ID,
 			slog.Any("error", err),
 		)
 		panic(fmt.Sprintf("failed to parse guild ID env variable: %v\n", err))
@@ -53,16 +62,16 @@ func main() {
 		panic(fmt.Sprintf("failed to register default commands: %v\n", err))
 	}
 
-	serveHTTP(addr, client)
+	serveHTTP(client)
 }
 
-func serveHTTP(addr string, client *commands.Client) {
+func serveHTTP(client *commands.Client) {
 	http.HandleFunc("POST /discord/callback", client.DiscordRequestHandler)
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, os.Kill)
 
-	server := &http.Server{Addr: addr}
-	slog.Info("Serving application at: " + addr + "/discord/callback")
+	server := &http.Server{Addr: ADDRESS}
+	slog.Info("Serving application at: " + ADDRESS + "/discord/callback")
 
 	go func() {
 		if err := server.ListenAndServe(); err != http.ErrServerClosed {

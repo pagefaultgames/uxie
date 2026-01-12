@@ -57,9 +57,8 @@ func (s *Store) init() error {
 		CREATE TABLE IF NOT EXISTS topics (
 			id          INTEGER PRIMARY KEY,
 			name        VARCHAR NOT NULL UNIQUE,
-			text        VARCHAR NOT NULL,
-		);
-	`); err != nil {
+			text        VARCHAR NOT NULL
+		);`); err != nil {
 		return err
 	}
 	return s.prepareStatements()

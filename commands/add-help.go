@@ -38,6 +38,7 @@ var addHelp = Command{
 }
 
 func handleAddHelp(ctx *tempest.CommandInteraction) {
+	utils.InfoAttrs("handling add help")
 	_ = ctx.DeleteReply()
 
 	topic, found := validateOptionValue[string](ctx, "topic")
@@ -49,14 +50,15 @@ func handleAddHelp(ctx *tempest.CommandInteraction) {
 		body       string
 		modalTitle = "Create new help topic " + topic
 	)
-	// Check if the command already exists, pre-filling the body if it does
+
+	// Check if the command already exists, pre-filling the body if so.
 	existing, err := db.GetHelpTopic(topic)
-	if errors.Is(err, sql.ErrNoRows) {
+	if err == nil {
 		body = existing.Text
 		modalTitle = fmt.Sprintf("Edit existing help topic %s", topic)
-	} else if err != nil {
+	} else if !errors.Is(err, sql.ErrNoRows) {
 		utils.ErrorAttrs("Failed to check for existing help topic in database",
-			slog.String("username", ctx.User.Username),
+			// slog.String("username", ctx.User.Username),
 			slog.String("command_name", ctx.Data.Name),
 			slog.String("name", topic),
 			slog.Uint64("ID", uint64(ctx.ID)),
@@ -71,7 +73,8 @@ func handleAddHelp(ctx *tempest.CommandInteraction) {
 	}
 
 	if err := ctx.SendModal(tempest.ResponseModalData{
-		Title: modalTitle,
+		Title:    modalTitle,
+		CustomID: addHelpModalId,
 		Components: []tempest.LayoutComponent{
 			tempest.ContainerComponent{
 				Type: tempest.CONTAINER_COMPONENT_TYPE,
@@ -93,7 +96,7 @@ func handleAddHelp(ctx *tempest.CommandInteraction) {
 		},
 	}); err != nil {
 		utils.ErrorAttrs("Failed to send add help topic modal",
-			slog.String("username", ctx.User.Username),
+			// slog.String("username", ctx.User.Username),
 			slog.String("topic", topic),
 			slog.String("command_name", ctx.Data.Name),
 			slog.Uint64("ID", uint64(ctx.ID)),
@@ -108,7 +111,7 @@ func handleAddHelp(ctx *tempest.CommandInteraction) {
 	response, cancel, err := ctx.HTTPClient.AwaitModal([]string{addHelpModalId})
 	if err != nil {
 		utils.ErrorAttrs("Failed to await help topic modal response",
-			slog.String("username", ctx.User.Username),
+			// slog.String("username", ctx.User.Username),
 			slog.String("topic", topic),
 			slog.String("command_name", ctx.Data.Name),
 			slog.Uint64("ID", uint64(ctx.ID)),
@@ -123,7 +126,7 @@ func handleAddHelp(ctx *tempest.CommandInteraction) {
 		select {
 		case <-timeout:
 			utils.InfoAttrs("Waiting for modal response timed out after 15 minutes",
-				slog.String("username", ctx.User.Username),
+				// slog.String("username", ctx.User.Username),
 				slog.String("topic", topic),
 				slog.String("command_name", ctx.Data.Name),
 				slog.Uint64("ID", uint64(ctx.ID)),

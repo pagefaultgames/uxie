@@ -37,7 +37,7 @@ func handleHelpAutocomplete(ctx tempest.CommandInteraction) []tempest.CommandOpt
 	focusedText, ok := f.(string)
 	if !ok {
 		utils.ErrorAttrs("Invalid type for help topic autocomplete option",
-			slog.String("username", ctx.User.Username),
+			// slog.String("username", ctx.User.Username),
 			slog.Uint64("ID", uint64(ctx.ID)),
 			slog.String("command_name", ctx.Data.Name),
 			slog.Any("topic", f),
@@ -48,7 +48,7 @@ func handleHelpAutocomplete(ctx tempest.CommandInteraction) []tempest.CommandOpt
 	topics, err := db.GetAllTopics()
 	if err != nil {
 		utils.ErrorAttrs("error fetching topics from database for autocomplete",
-			slog.String("username", ctx.User.Username),
+			// slog.String("username", ctx.User.Username),
 			slog.Uint64("ID", uint64(ctx.ID)),
 			slog.String("command_name", ctx.Data.Name),
 			slog.Any("error", err),
@@ -86,7 +86,7 @@ func showHelpTopic(ctx *tempest.CommandInteraction) {
 		return
 	} else if err != nil {
 		utils.ErrorAttrs("Failed to retrieve help topic from database",
-			slog.String("username", ctx.User.Username),
+			// slog.String("username", ctx.User.Username),
 			slog.String("name", opt),
 			slog.Uint64("ID", uint64(ctx.ID)),
 			slog.Any("error", err),
@@ -104,7 +104,7 @@ func showHelpTopic(ctx *tempest.CommandInteraction) {
 		Content: fmt.Sprintf("**%s**\n\n%s", topic.Name, topic.Text),
 	}); err != nil {
 		utils.ErrorAttrs("Failed to send help topic message",
-			slog.String("username", ctx.User.Username),
+			// slog.String("username", ctx.User.Username),
 			slog.String("name", opt),
 			slog.Uint64("ID", uint64(ctx.ID)),
 			slog.Any("error", err),

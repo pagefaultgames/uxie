@@ -49,7 +49,7 @@ func validateOptionValue[T string | bool | float64](
 	if !ok {
 		utils.ErrorAttrs(
 			fmt.Sprintf("Invalid input type for %s command option %s!", ctx.Data.Name, optName),
-			slog.String("username", ctx.User.Username),
+			// slog.String("username", ctx.User.Username),
 			slog.String("type", fmt.Sprintf("%T", opt)),
 			slog.Uint64("ID", uint64(ctx.ID)),
 		)
