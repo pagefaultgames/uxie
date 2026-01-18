@@ -14,7 +14,6 @@ import (
 
 const (
 	// ID for the "choose title/desc" input modal
-	addHelpModalId          = "addHelpModalNameInput"
 	addHelpModalTextInputId = "addHelpModalTextInput"
 )
 
@@ -38,7 +37,6 @@ var addHelp = Command{
 }
 
 func handleAddHelp(ctx *tempest.CommandInteraction) {
-	utils.InfoAttrs("handling add help")
 	_ = ctx.DeleteReply()
 
 	topic, found := utils.ValidateOptionValue[string](ctx, "topic")
@@ -76,18 +74,19 @@ func handleAddHelp(ctx *tempest.CommandInteraction) {
 }
 
 func sendAddHelpModal(ctx *tempest.CommandInteraction, topic, modalTitle, body string) {
+	modalId := addHelpModalTextInputId + ctx.ID.String()
 	err := ctx.SendModal(tempest.ResponseModalData{
-		Title:    modalTitle,
-		CustomID: addHelpModalId,
+		Title: modalTitle,
 		Components: []tempest.LayoutComponent{
 			tempest.ContainerComponent{
 				Type: tempest.CONTAINER_COMPONENT_TYPE,
 				Components: []tempest.AnyComponent{
 					// TODO: Add support for more than just plaintext
 					tempest.LabelComponent{
+						Type:  tempest.LABEL_COMPONENT_TYPE,
 						Label: "What text should the topic display?",
 						Component: tempest.TextInputComponent{
-							CustomID:    addHelpModalTextInputId,
+							CustomID:    modalId,
 							Type:        tempest.TEXT_INPUT_COMPONENT_TYPE,
 							Style:       tempest.PARAGRAPH_TEXT_INPUT_STYLE,
 							Required:    true,
@@ -111,10 +110,9 @@ func sendAddHelpModal(ctx *tempest.CommandInteraction, topic, modalTitle, body s
 		return
 	}
 
-	// Wait for either 15 minutes to pass or the modal to be submitted inside another goroutine
-	timeout := time.After(15 * time.Minute)
-	response, cancel, err := ctx.HTTPClient.AwaitModal([]string{addHelpModalId})
-	if err != nil {
+	// Wait for either 2 minutes to pass or the modal to respond
+	response, cancelFunc, err := ctx.HTTPClient.AwaitModal([]string{modalId})
+	if err != nil || response == nil {
 		utils.ErrorAttrs("Failed to await help topic modal response",
 			slog.String("username", ctx.BaseUser().Username),
 			slog.String("topic", topic),
@@ -126,22 +124,39 @@ func sendAddHelpModal(ctx *tempest.CommandInteraction, topic, modalTitle, body s
 		return
 	}
 
+	utils.InfoAttrs("Sent help modal successfully",
+		slog.String("username", ctx.BaseUser().Username),
+		slog.String("topic", topic),
+		slog.String("command_name", ctx.Data.Name),
+		slog.Uint64("ID", uint64(ctx.ID)),
+		slog.String("modal_id", modalId),
+	)
+
+	_ = ctx.Defer(true)
+	timeout := time.After(2 * time.Minute)
 	go func() {
-		defer cancel()
+		defer cancelFunc()
 		select {
+		case mtx, ok := <-response:
+			if !ok {
+				utils.InfoAttrs("channel closed; id:" + modalId)
+				return
+			}
+			utils.InfoAttrs("received help modal response")
+			addHelpTopic(mtx, topic)
+			return
 		case <-timeout:
-			utils.InfoAttrs("Waiting for modal response timed out after 15 minutes",
-				// slog.String("username", ctx.User.Username),
+			utils.InfoAttrs("Waiting for modal response timed out after 2 minutes",
+				slog.String("username", ctx.BaseUser().Username),
 				slog.String("topic", topic),
 				slog.String("command_name", ctx.Data.Name),
 				slog.Uint64("ID", uint64(ctx.ID)),
 			)
 			_, _ = ctx.SendLinearFollowUp(
-				"Modal timed out after 15 minutes. Please try again later.",
+				"Modal timed out after 2 minutes. Please try again later.",
 				true,
 			)
-		case mtx := <-response:
-			addHelpTopic(mtx, topic)
+			return
 		}
 	}()
 }
