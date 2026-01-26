@@ -47,6 +47,10 @@ tasks:
     desc: Setup hot reload with air
     cmd: go tool github.com/air-verse/air
     method: none
+  build:
+    desc: Build the Oranguru backend binary.
+    cmd: go build -o tmp/oranguru .
+    method: none
 
   test:
     desc: Run backend tests with environment-aware defaults.

@@ -10,8 +10,8 @@ import (
 
 type modalHandler = func(mtx tempest.ModalInteraction)
 
-// A Command is a basic struct wrapping tempest's Command type with additional metadata about how to handle any modals it creates.
-type Command struct {
+// A command is a basic struct wrapping tempest's command type with additional metadata about how to handle any modals it creates.
+type command struct {
 	tempest.Command
 
 	// Any handlers this command has for its modals, mapped to their respective custom IDs.
@@ -20,7 +20,7 @@ type Command struct {
 	modalHandlers map[string]modalHandler
 }
 
-func (c *Command) Register(client *tempest.HTTPClient) error {
+func (c *command) Register(client *tempest.HTTPClient) error {
 	if err := client.RegisterCommand(c.Command); err != nil {
 		utils.ErrorAttrs("Failed to register command", slog.String("command", c.Name))
 		return fmt.Errorf("failed to register command: %w", err)

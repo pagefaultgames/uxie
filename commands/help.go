@@ -15,7 +15,7 @@ import (
 )
 
 // helpCommand is the slash command to show a help topic message.
-var helpCommand = Command{
+var helpCommand = command{
 	Command: tempest.Command{
 		Name:        "help",
 		Description: "Get help on available topics.",

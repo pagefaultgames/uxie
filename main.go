@@ -32,7 +32,7 @@ func main() {
 		BaseClientOptions: tempest.BaseClientOptions{
 			Token: DISCORD_BOT_TOKEN,
 		},
-		Trace: true,
+		Trace:     true,
 		PublicKey: DISCORD_PUBLIC_KEY,
 	})
 
