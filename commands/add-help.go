@@ -81,19 +81,17 @@ func sendAddHelpModal(ctx *tempest.CommandInteraction, topic, modalTitle, body s
 	err := ctx.SendModal(tempest.ResponseModalData{
 		Title:    modalTitle,
 		CustomID: addHelpModalId,
+		// TODO: Fix once Tempest is correctly typed to match Discord's API:
+		// https://github.com/amatsagu/tempest/issues/51
 		Components: []tempest.LayoutComponent{
-			tempest.ContainerComponent{
-				Components: []tempest.AnyComponent{
-					tempest.TextDisplayComponent{
-						Type:    tempest.TEXT_DISPLAY_COMPONENT_TYPE,
-						Content: "### Selected Topic:",
-					},
-					tempest.TextDisplayComponent{
-						Type:    tempest.TEXT_DISPLAY_COMPONENT_TYPE,
-						Content: "`" + topic + "`",
-					},
-				},
-			},
+			// tempest.TextDisplayComponent{
+			// 	Type:    tempest.TEXT_DISPLAY_COMPONENT_TYPE,
+			// 	Content: "### Selected Topic:",
+			// },
+			// tempest.TextDisplayComponent{
+			// 	Type:    tempest.TEXT_DISPLAY_COMPONENT_TYPE,
+			// 	Content: "`" + topic + "`",
+			// },
 			// TODO: Add support for more than just plaintext
 			tempest.LabelComponent{
 				Type:  tempest.LABEL_COMPONENT_TYPE,

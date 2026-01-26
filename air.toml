@@ -6,7 +6,7 @@ tmp_dir = "tmp"
 
 [build]
 # Just plain old shell command. You could use `make` as well.
-cmd = "task build"
+cmd = "go build -o ./tmp/oranguru main.go"
 # Entrypoint binary relative to root. First item is the executable, more items are default arguments.
 entrypoint = ["./tmp/oranguru"]
 # Watch these filename extensions. Use ["*"] to watch all file extensions.
@@ -21,6 +21,7 @@ poll = false
 poll_interval = 500
 
 delay = 10_000
+log = "air.log"
 
 stop_on_error = true
 
