@@ -8,7 +8,7 @@ tool (
 )
 
 require (
-	github.com/amatsagu/tempest v1.4.4
+	github.com/amatsagu/tempest v1.5.0
 	github.com/mattn/go-sqlite3 v1.14.33
 )
 

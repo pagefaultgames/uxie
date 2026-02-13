@@ -10,63 +10,22 @@ import (
 	"github.com/pagefaultgames/oranguru/types"
 )
 
-// GetTextInputValue is a helper function to recursively search through one or more components
-// to find a text input component with the given custom ID.
-// It returns the text contents of the first match, or an empty string if absent.
-func GetTextInputValue(
-	mtx *tempest.ModalInteraction,
-	customId string,
-) (contents string) {
-	for _, comp := range mtx.Data.Components {
-		if res := checkComponent(comp, customId); res != "" {
-			return res
-		}
-	}
-	return ""
-}
-
-// checkComponent is a recursive helper function to search through a component and its descendants
-// for a text input component with the given custom ID.
-// It returns the text contents of the first match, or an empty string if absent.
-func checkComponent(c tempest.AnyComponent, customId string) (contents string) {
-	switch comp := c.(type) {
-	case tempest.LabelComponent:
-		return checkComponent(comp.Component, customId)
-	case tempest.ActionRowComponent:
-		for _, subComp := range comp.Components {
-			if res := checkComponent(subComp, customId); res != "" {
-				return res
-			}
-		}
-	case tempest.ContainerComponent:
-		for _, subComp := range comp.Components {
-			if res := checkComponent(subComp, customId); res != "" {
-				return res
-			}
-		}
-	case tempest.TextInputComponent:
-		if comp.CustomID == customId {
-			return comp.Value
-		}
-	}
-	return ""
-}
-
 // ValidateOptionValue is a helper function to extract and validate a command option's value type.
-// It returns the value (which will be zero if not found) and whether the value was found and of the correct type.
-// This function performs necessary logging and error messaging on failure, so callers can simply return
-// if ok is false.
+// It returns the value (which will be zero if not found) and whether the value was found successfully.
+//
+// This function performs requisite logging and error messaging on failure, so callers can simply return immediately
+// if found is false.
 func ValidateOptionValue[T string | bool | float64](
 	ctx *tempest.CommandInteraction,
 	optName string,
-) (topic T, ok bool) {
+) (topic T, found bool) {
 	opt, found := ctx.GetOptionValue(optName)
 	if !found {
 		return topic, false
 	}
 
-	topic, ok = opt.(T)
-	if !ok {
+	topic, found = opt.(T)
+	if !found {
 		ErrorAttrs(
 			fmt.Sprintf("Invalid input type for %s command option %s!", ctx.Data.Name, optName),
 			slog.String("username", ctx.BaseUser().Username),
@@ -84,10 +43,9 @@ func ValidateOptionValue[T string | bool | float64](
 			true,
 		)
 	}
-	return topic, ok
+	return topic, found
 }
 
-// can
 type canSendLinearFollowUp interface {
 	SendLinearFollowUp(content string, ephemeral bool) (tempest.Message, error)
 }

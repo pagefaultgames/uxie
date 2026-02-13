@@ -13,10 +13,10 @@ var pingCommand = command{
 			Type:        tempest.BOOLEAN_OPTION_TYPE,
 			Required:    false,
 			Name:        "ephemeral",
-			Description: "Whether the reply should be ephemeral (only visible to you, default false)",
+			Description: "Whether the reply should be ephemeral (only visible to you, default true)",
 		}},
 		SlashCommandHandler: func(itx *tempest.CommandInteraction) {
-			ephemeral := false
+			ephemeral := true
 			if len(itx.Data.Options) > 0 {
 				if v, ok := itx.Data.Options[0].Value.(bool); ok {
 					ephemeral = v

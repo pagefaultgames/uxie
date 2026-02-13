@@ -77,22 +77,21 @@ func handleAddHelp(ctx *tempest.CommandInteraction) {
 	sendAddHelpModal(ctx, topic, modalTitle, body)
 }
 
+const (
+	helpTopicHeaderPre  = "### Selected Help Topic:\n`"
+	helpTopicHeaderPost = "`"
+)
+
 func sendAddHelpModal(ctx *tempest.CommandInteraction, topic, modalTitle, body string) {
 	err := ctx.SendModal(tempest.ResponseModalData{
 		Title:    modalTitle,
 		CustomID: addHelpModalId,
-		// TODO: Fix once Tempest is correctly typed to match Discord's API:
-		// https://github.com/amatsagu/tempest/issues/51
-		Components: []tempest.LayoutComponent{
-			// tempest.TextDisplayComponent{
-			// 	Type:    tempest.TEXT_DISPLAY_COMPONENT_TYPE,
-			// 	Content: "### Selected Topic:",
-			// },
-			// tempest.TextDisplayComponent{
-			// 	Type:    tempest.TEXT_DISPLAY_COMPONENT_TYPE,
-			// 	Content: "`" + topic + "`",
-			// },
-			// TODO: Add support for more than just plaintext
+		Components: []tempest.ModalComponent{
+			tempest.TextDisplayComponent{
+				Type:    tempest.TEXT_DISPLAY_COMPONENT_TYPE,
+				Content: helpTopicHeaderPre + topic + helpTopicHeaderPost,
+			},
+			// TODO: Add support for more than just plaintext content in the help topic body
 			tempest.LabelComponent{
 				Type:  tempest.LABEL_COMPONENT_TYPE,
 				Label: "What text should the topic display?",
@@ -145,7 +144,7 @@ func addHelpTopic(mtx tempest.ModalInteraction) {
 		slog.Uint64("ID", uint64(mtx.ID)),
 	)
 
-	text := utils.GetTextInputValue(&mtx, addHelpModalTextInputId)
+	text := mtx.GetInputValue(addHelpModalTextInputId)
 	if text == "" {
 		utils.ErrorAttrs("Text input not found in add-help modal",
 			slog.String("username", mtx.BaseUser().Username),
@@ -157,8 +156,9 @@ func addHelpTopic(mtx tempest.ModalInteraction) {
 	}
 
 	if err := db.AddHelpTopic(topic, text); err != nil {
-		utils.ErrorAttrs("Failed to register new help topic in database",
+		utils.ErrorAttrs("Failed to register help topic in database",
 			slog.String("username", mtx.BaseUser().Username),
+			slog.String("topic", topic),
 			slog.String("text", text),
 			slog.Uint64("ID", uint64(mtx.ID)),
 			slog.Any("error", err),
@@ -170,14 +170,13 @@ func addHelpTopic(mtx tempest.ModalInteraction) {
 }
 
 func getTopic(mtx *tempest.ModalInteraction) string {
-	container, ok := mtx.Data.Components[0].(tempest.ContainerComponent)
-	if !ok || len(container.Components) < 2 {
-		return ""
-	}
-	textDisplay, ok := container.Components[1].(tempest.TextDisplayComponent)
+	textDisplay, ok := mtx.Data.Components[0].(tempest.TextDisplayComponent)
 	if !ok {
 		return ""
 	}
 
-	return strings.Trim(textDisplay.Content, "`")
+	return strings.TrimSuffix(
+		strings.TrimPrefix(textDisplay.Content, helpTopicHeaderPre),
+		helpTopicHeaderPost,
+	)
 }
