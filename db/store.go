@@ -112,7 +112,7 @@ func (s *Store) close() (err error) {
 			)
 			err = errors.Join(
 				err,
-				fmt.Errorf("failed to close prepared statement %s: %w", name, stmtCloseErr),
+				fmt.Errorf("failed to close prepared statement %q: %w", name, stmtCloseErr),
 			)
 		}
 	}
@@ -132,7 +132,7 @@ func (s *Store) getHelpTopic(name string) (topic HelpTopic, err error) {
 	)
 	err = s.statements[getHelpTopic].QueryRow(name).Scan(&cid, &text)
 	if err != nil {
-		return HelpTopic{}, fmt.Errorf("failed to get help topic %s: %w", name, err)
+		return HelpTopic{}, fmt.Errorf("failed to get help topic %q: %w", name, err)
 	}
 	return HelpTopic{
 		id:   cid,
@@ -175,7 +175,7 @@ func (s *Store) getAllTopics() (topics []HelpTopic, err error) {
 func (s *Store) addHelpTopic(name, text string) error {
 	_, err := s.statements[addHelpTopic].Exec(name, text)
 	if err != nil {
-		return fmt.Errorf("failed to add help topic %s to database: %w", name, err)
+		return fmt.Errorf("failed to add help topic %q to database: %w", name, err)
 	}
 
 	return nil
@@ -184,7 +184,7 @@ func (s *Store) addHelpTopic(name, text string) error {
 func (s *Store) deleteTopic(name string) error {
 	res, err := s.statements[deleteTopic].Exec(name)
 	if err != nil {
-		return fmt.Errorf("failed to delete help topic %s from database: %w", name, err)
+		return fmt.Errorf("failed to delete help topic %q from database: %w", name, err)
 	}
 	if delCount, err := res.RowsAffected(); err == nil && delCount == 0 {
 		return sql.ErrNoRows

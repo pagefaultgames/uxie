@@ -37,9 +37,9 @@ func showHelpTopic(ctx *tempest.CommandInteraction) {
 		utils.InfoAttrs("Incorrect help topic specified; showing all topics",
 			slog.String("username", ctx.BaseUser().Username),
 			slog.Uint64("ID", uint64(ctx.ID)),
-			slog.String("command_name", ctx.Data.Name),
+			slog.String("commandName", ctx.Data.Name),
 		)
-		printAllTopics(ctx, false)
+		_ = ctx.SendLinearReply(getAllTopicText(), false)
 		return
 	}
 
@@ -49,9 +49,9 @@ func showHelpTopic(ctx *tempest.CommandInteraction) {
 			slog.String("username", ctx.BaseUser().Username),
 			slog.String("topic", opt),
 			slog.Uint64("ID", uint64(ctx.ID)),
-			slog.String("command_name", ctx.Data.Name),
+			slog.String("commandName", ctx.Data.Name),
 		)
-		printAllTopics(ctx, false)
+		_ = ctx.SendLinearReply(getAllTopicText(), false)
 		return
 	} else if err != nil {
 		utils.ErrorAttrs("Failed to retrieve help topic from database",
@@ -62,27 +62,17 @@ func showHelpTopic(ctx *tempest.CommandInteraction) {
 		)
 		utils.SendErrorMessage(
 			ctx,
-			fmt.Sprintf("Failed to retrieve help topic %s from database!", opt),
+			fmt.Sprintf("Failed to retrieve help topic %q from database!", opt),
 			err,
 		)
 		return
 	}
 
 	// Send the actual message
-	if err := ctx.SendLinearReply(formatHelpMessage(topic), false); err != nil {
-		utils.ErrorAttrs("Failed to send help topic message",
-			slog.String("username", ctx.BaseUser().Username),
-			slog.String("name", opt),
-			slog.Uint64("ID", uint64(ctx.ID)),
-			slog.Any("error", err),
-		)
-
-		utils.SendErrorMessage(
-			ctx,
-			fmt.Sprintf("Failed to send help topic message %s!", opt),
-			err,
-		)
-	}
+	_ = ctx.SendReply(tempest.ResponseMessageData{
+		Content:         formatHelpMessage(topic),
+		AllowedMentions: &tempest.AllowedMentions{Parse: []tempest.AllowedMentionsType{}},
+	}, true, nil)
 }
 
 func formatHelpMessage(topic db.HelpTopic) string {
@@ -91,6 +81,6 @@ func formatHelpMessage(topic db.HelpTopic) string {
 	b.WriteString(topic.Name)
 	b.WriteString("**\n\n")
 	b.WriteString(topic.Text)
-	b.WriteString("\n\n-# This message was created by a bot.\n-# Have a nice day.")
+	b.WriteRune('\n')
 	return b.String()
 }

@@ -44,12 +44,12 @@ func init() {
 	}
 	dir := filepath.Dir(path)
 	if err := os.MkdirAll(dir, 0o0755); err != nil {
-		panic(fmt.Sprintf("error creating logfile output directory %s: %v", dir, err))
+		panic(fmt.Sprintf("error creating logfile output directory %q: %v", dir, err))
 	}
 
 	outFile, err := os.Create(path)
 	if err != nil {
-		panic(fmt.Sprintf("error creating logfile output file %s: %v", path, err))
+		panic(fmt.Sprintf("error creating logfile output file %q: %v", path, err))
 	}
 
 	// NB: slog by default forwards to the standard library's log package

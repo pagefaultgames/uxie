@@ -39,7 +39,7 @@ func main() {
 				slog.Info("Received command interaction",
 					slog.String("username", ctx.BaseUser().Username),
 					slog.Uint64("ID", uint64(ctx.ID)),
-					slog.String("command_name", ctx.Data.Name),
+					slog.String("commandName", ctx.Data.Name),
 				)
 				return true
 			},

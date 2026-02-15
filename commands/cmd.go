@@ -31,7 +31,7 @@ func (c *command) Register(client *tempest.HTTPClient) error {
 			utils.ErrorAttrs("Failed to register command modal",
 				slog.String("command", c.Name),
 				slog.String("modal_id", cid))
-			return fmt.Errorf("failed to register command modal %s: %w", cid, err)
+			return fmt.Errorf("failed to register command modal %q: %w", cid, err)
 		}
 	}
 	return nil

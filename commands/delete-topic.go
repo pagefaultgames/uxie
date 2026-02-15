@@ -39,27 +39,20 @@ func handleDeleteTopic(ctx *tempest.CommandInteraction) {
 
 	err := db.DeleteTopic(topic)
 
-	var msg string
 	switch {
 	case errors.Is(err, sql.ErrNoRows):
 		utils.InfoAttrs("Attempted to delete nonexistent help topic",
 			slog.String("username", ctx.BaseUser().Username),
 			slog.String("topic", topic),
 			slog.Uint64("ID", uint64(ctx.ID)),
-			slog.String("command_name", ctx.Data.Name),
+			slog.String("commandName", ctx.Data.Name),
 		)
-		msg = fmt.Sprintf("Error: No help topic found with name %s!", topic)
-
-	case err == nil:
-		utils.InfoAttrs("Successfully deleted help topic from database",
-			slog.String("username", ctx.BaseUser().Username),
-			slog.String("topic", topic),
-			slog.Uint64("ID", uint64(ctx.ID)),
-			slog.String("command_name", ctx.Data.Name),
+		_ = ctx.SendLinearReply(
+			fmt.Sprintf("Error: No help topic found with name %q!", topic),
+			true,
 		)
-		msg = fmt.Sprintf("Successfully deleted help topic %s from the database."+
-			"\nIt may take a few minutes to update.", topic)
-	default:
+		return
+	case err != nil:
 		utils.ErrorAttrs("Failed to delete help topic from database",
 			slog.String("username", ctx.BaseUser().Username),
 			slog.String("name", topic),
@@ -72,15 +65,16 @@ func handleDeleteTopic(ctx *tempest.CommandInteraction) {
 			err,
 		)
 		return
-	}
-
-	sendErr := ctx.SendLinearReply(msg, false)
-	if sendErr != nil {
-		utils.ErrorAttrs("Failed to send success message after deleting help topic",
+	default:
+		utils.InfoAttrs("Successfully deleted help topic from database",
 			slog.String("username", ctx.BaseUser().Username),
-			slog.String("name", topic),
+			slog.String("topic", topic),
 			slog.Uint64("ID", uint64(ctx.ID)),
-			slog.Any("error", sendErr),
+			slog.String("commandName", ctx.Data.Name),
 		)
+		_ = ctx.SendLinearReply(
+			fmt.Sprintf("Successfully deleted help topic %q from the database."+
+				"\nIt may take a few minutes to update.", topic),
+			false)
 	}
 }

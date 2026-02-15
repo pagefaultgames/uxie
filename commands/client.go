@@ -29,7 +29,7 @@ const commandRegistrationDelay = 500 * time.Millisecond
 func (c *Client) RegisterDefaultCommands(guildID tempest.Snowflake) error {
 	for _, cmd := range allCommands {
 		if err := cmd.Register(c.HTTPClient); err != nil {
-			return fmt.Errorf("failed to register command %s: %w", cmd.Name, err)
+			return fmt.Errorf("failed to register command %q: %w", cmd.Name, err)
 		}
 		time.Sleep(commandRegistrationDelay)
 	}

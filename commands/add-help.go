@@ -4,18 +4,15 @@ import (
 	"database/sql"
 	"errors"
 	"log/slog"
+	"regexp"
 
 	"github.com/amatsagu/tempest"
 	"github.com/pagefaultgames/oranguru/db"
 	"github.com/pagefaultgames/oranguru/utils"
 )
 
-const (
-	// ID for the actual modal itself
-	addHelpModalId = "addHelpModal"
-	// ID for the "choose title/desc" input modal
-	addHelpModalTextInputId = "addHelpModalTextInput"
-)
+// ID for the actual modal itself
+const addHelpModalId = "addHelpModal"
 
 var addHelp = command{
 	Command: tempest.Command{
@@ -26,7 +23,7 @@ var addHelp = command{
 			{
 				Type:        tempest.STRING_OPTION_TYPE,
 				Name:        "topic",
-				Description: "The name of the help topic to create or update.",
+				Description: "The name of the help topic to create or update. Keep it short and concise!",
 				Required:    true,
 				MinLength:   1,
 				MaxLength:   100,
@@ -45,16 +42,21 @@ func handleAddHelp(ctx *tempest.CommandInteraction) {
 		return
 	}
 
+	if errMsg := checkTopicValidity(topic); errMsg != "" {
+		_ = ctx.SendLinearReply(errMsg, true)
+		return
+	}
+
 	var (
 		helpText   string
-		modalTitle = "Create new help topic " + topic
+		modalTitle = "Create new help topic"
 	)
 
 	// Check if the command already exists, pre-filling the body if so.
 	existing, err := db.GetHelpTopic(topic)
 	if err == nil {
 		helpText = existing.Text
-		modalTitle = "Edit existing help topic " + topic
+		modalTitle = "Edit existing help topic"
 	} else if !errors.Is(err, sql.ErrNoRows) {
 		utils.ErrorAttrs("Failed to check for existing help topic in database",
 			slog.String("username", ctx.BaseUser().Username),
@@ -83,6 +85,7 @@ func sendAddHelpModal(ctx *tempest.CommandInteraction, topic, modalTitle, helpTe
 				Content: "### Selected Help Topic:\n`" + topic + "`",
 			},
 			// TODO: Add support for more than just plaintext content in the help topic body
+			// TODO: More configuration?
 			tempest.LabelComponent{
 				Type:  tempest.LABEL_COMPONENT_TYPE,
 				Label: "What text should the topic display?",
@@ -96,7 +99,7 @@ func sendAddHelpModal(ctx *tempest.CommandInteraction, topic, modalTitle, helpTe
 					Value:    helpText,
 					// TODO: Do bots need to adhere to normal non-nitro message length limits?
 					MaxLength:   2000,
-					Placeholder: "Enter the help topic's body. All Markdown features are supported.",
+					Placeholder: "Enter the help topic's body.\nAll Markdown features are supported.",
 				},
 			},
 		},
@@ -115,6 +118,7 @@ func sendAddHelpModal(ctx *tempest.CommandInteraction, topic, modalTitle, helpTe
 	utils.InfoAttrs("Sent add help modal successfully",
 		slog.String("username", ctx.BaseUser().Username),
 		slog.String("topic", topic),
+		slog.String("helpText", helpText),
 		slog.Uint64("ID", uint64(ctx.ID)),
 	)
 }
@@ -177,4 +181,13 @@ func addHelpTopic(mtx tempest.ModalInteraction) {
 			"\nTo view the topic, use the `/help` command.",
 		true,
 	)
+}
+
+var pingRe = regexp.MustCompile(` @`)
+
+func checkTopicValidity(topic string) (invalidMsg string) {
+	if pingRe.MatchString(topic) {
+		return "Topic names cannot contain the substring `@` to prevent unwanted mentions in help messages."
+	}
+	return ""
 }

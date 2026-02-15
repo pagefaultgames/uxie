@@ -25,8 +25,8 @@ func helpTopicAutocompleteFunc(
 			utils.ErrorAttrs("Invalid type for help topic autocomplete option",
 				slog.String("username", ctx.BaseUser().Username),
 				slog.Uint64("ID", uint64(ctx.ID)),
-				slog.String("command_name", ctx.Data.Name),
-				slog.String("option_name", name),
+				slog.String("commandName", ctx.Data.Name),
+				slog.String("optionName", name),
 				slog.Any("value", val),
 			)
 			return nil
@@ -38,7 +38,7 @@ func helpTopicAutocompleteFunc(
 			utils.ErrorAttrs("Error fetching topics from database for autocomplete",
 				slog.String("username", ctx.BaseUser().Username),
 				slog.Uint64("ID", uint64(ctx.ID)),
-				slog.String("command_name", ctx.Data.Name),
+				slog.String("commandName", ctx.Data.Name),
 				slog.Any("error", err),
 			)
 			return []tempest.CommandOptionChoice{}
