@@ -4,12 +4,13 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"log"
 	"log/slog"
 	"os"
 	"path/filepath"
 )
 
-// NB: These techincally have incorrect PC counters, but it hardly matters since we don't include said info in the logs anyhow.
+// NB: These technically have incorrect PC counters, but it hardly matters since we don't include said info in the logs anyhow.
 // (it takes up too much space in practice)
 
 // DebugAttrs is a wrapper around [slog.LogAttrs] for logging debug messages.
@@ -51,5 +52,7 @@ func init() {
 		panic(fmt.Sprintf("error creating logfile output file %s: %v", path, err))
 	}
 
-	slog.SetDefault(slog.New(slog.NewTextHandler(io.MultiWriter(outFile, os.Stdout), nil)))
+	// NB: slog by default forwards to the standard library's log package
+	log.SetPrefix("[ORANGURU] ")
+	log.SetOutput(io.MultiWriter(outFile, os.Stdout))
 }

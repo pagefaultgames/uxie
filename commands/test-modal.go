@@ -57,7 +57,7 @@ func sendTestModal(ctx *tempest.CommandInteraction) {
 			slog.Uint64("ID", uint64(ctx.ID)),
 			slog.Any("error", err),
 		)
-		utils.SendErrorFollowUp(ctx, "Failed to send modal!", err)
+		utils.SendErrorMessage(ctx, "Failed to send modal!", err)
 		return
 	}
 

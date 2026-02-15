@@ -55,10 +55,10 @@ func getStore() (*Store, error) {
 
 // GetHelpTopic retrieves the stored [HelpTopic] with the given name.
 // If no such topic exists, an error implementing [sql.ErrNoRows] will be returned.
-func GetHelpTopic(name string) (*HelpTopic, error) {
+func GetHelpTopic(name string) (HelpTopic, error) {
 	store, err := getStore()
 	if err != nil {
-		return nil, err
+		return HelpTopic{}, err
 	}
 
 	return store.getHelpTopic(name)

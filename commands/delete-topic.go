@@ -17,16 +17,15 @@ var deleteTopic = command{
 		Name:        "delete-topic",
 		Description: "Delete a help topic from the database.",
 		Type:        tempest.CHAT_INPUT_COMMAND_TYPE,
-		Options: []tempest.CommandOption{
-			{
-				Type:        tempest.STRING_OPTION_TYPE,
-				Name:        "topic",
-				Description: "The name of the help topic to delete.",
-				Required:    true,
-				MinLength:   1,
-				MaxLength:   100,
-			},
-		},
+		Options: []tempest.CommandOption{{
+			Type:         tempest.STRING_OPTION_TYPE,
+			Name:         "topic",
+			Description:  "The name of the help topic to delete.",
+			Required:     true,
+			MinLength:    1,
+			MaxLength:    100,
+			AutoComplete: true,
+		}},
 		AutoCompleteHandler: helpTopicAutocompleteFunc("topic"),
 		SlashCommandHandler: handleDeleteTopic,
 	},
@@ -39,26 +38,35 @@ func handleDeleteTopic(ctx *tempest.CommandInteraction) {
 	}
 
 	err := db.DeleteTopic(topic)
-	if errors.Is(err, sql.ErrNoRows) {
+
+	var msg string
+	switch {
+	case errors.Is(err, sql.ErrNoRows):
 		utils.InfoAttrs("Attempted to delete nonexistent help topic",
 			slog.String("username", ctx.BaseUser().Username),
 			slog.String("topic", topic),
 			slog.Uint64("ID", uint64(ctx.ID)),
 			slog.String("command_name", ctx.Data.Name),
 		)
-		_, _ = ctx.SendLinearFollowUp(
-			fmt.Sprintf("Error: No help topic found with name %s!", topic),
-			true,
+		msg = fmt.Sprintf("Error: No help topic found with name %s!", topic)
+
+	case err == nil:
+		utils.InfoAttrs("Successfully deleted help topic from database",
+			slog.String("username", ctx.BaseUser().Username),
+			slog.String("topic", topic),
+			slog.Uint64("ID", uint64(ctx.ID)),
+			slog.String("command_name", ctx.Data.Name),
 		)
-		return
-	} else if err != nil {
+		msg = fmt.Sprintf("Successfully deleted help topic %s from the database."+
+			"\nIt may take a few minutes to update.", topic)
+	default:
 		utils.ErrorAttrs("Failed to delete help topic from database",
 			slog.String("username", ctx.BaseUser().Username),
 			slog.String("name", topic),
 			slog.Uint64("ID", uint64(ctx.ID)),
 			slog.Any("error", err),
 		)
-		utils.SendErrorFollowUp(
+		utils.SendErrorMessage(
 			ctx,
 			"Failed to delete help topic "+topic+" from database!",
 			err,
@@ -66,9 +74,13 @@ func handleDeleteTopic(ctx *tempest.CommandInteraction) {
 		return
 	}
 
-	_, _ = ctx.SendLinearFollowUp(
-		fmt.Sprintf("Successfully deleted help topic %s from the database."+
-			"\nIt may take a few minutes to update.", topic),
-		false,
-	)
+	sendErr := ctx.SendLinearReply(msg, false)
+	if sendErr != nil {
+		utils.ErrorAttrs("Failed to send success message after deleting help topic",
+			slog.String("username", ctx.BaseUser().Username),
+			slog.String("name", topic),
+			slog.Uint64("ID", uint64(ctx.ID)),
+			slog.Any("error", sendErr),
+		)
+	}
 }

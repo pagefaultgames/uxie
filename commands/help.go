@@ -5,10 +5,10 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"strings"
 
 	"github.com/amatsagu/tempest"
 	"github.com/pagefaultgames/oranguru/db"
-	"github.com/pagefaultgames/oranguru/types"
 	"github.com/pagefaultgames/oranguru/utils"
 )
 
@@ -33,21 +33,25 @@ var helpCommand = command{
 func showHelpTopic(ctx *tempest.CommandInteraction) {
 	opt, found := utils.ValidateOptionValue[string](ctx, "topic")
 	if !found {
+		// If no topic was provided, show the list of available topics.
+		utils.InfoAttrs("Incorrect help topic specified; showing all topics",
+			slog.String("username", ctx.BaseUser().Username),
+			slog.Uint64("ID", uint64(ctx.ID)),
+			slog.String("command_name", ctx.Data.Name),
+		)
+		printAllTopics(ctx, false)
 		return
 	}
 
 	topic, err := db.GetHelpTopic(opt)
 	if errors.Is(err, sql.ErrNoRows) {
-		utils.InfoAttrs("Attempted to show nonexistent help topic",
+		utils.InfoAttrs("Nonexistent help topic provided; showing all topics",
 			slog.String("username", ctx.BaseUser().Username),
 			slog.String("topic", opt),
 			slog.Uint64("ID", uint64(ctx.ID)),
 			slog.String("command_name", ctx.Data.Name),
 		)
-		_, _ = ctx.SendLinearFollowUp(
-			fmt.Sprintf("Error: No help topic found with name %s!", opt),
-			true,
-		)
+		printAllTopics(ctx, false)
 		return
 	} else if err != nil {
 		utils.ErrorAttrs("Failed to retrieve help topic from database",
@@ -56,7 +60,7 @@ func showHelpTopic(ctx *tempest.CommandInteraction) {
 			slog.Uint64("ID", uint64(ctx.ID)),
 			slog.Any("error", err),
 		)
-		utils.SendErrorFollowUp(
+		utils.SendErrorMessage(
 			ctx,
 			fmt.Sprintf("Failed to retrieve help topic %s from database!", opt),
 			err,
@@ -65,9 +69,7 @@ func showHelpTopic(ctx *tempest.CommandInteraction) {
 	}
 
 	// Send the actual message
-	if err := utils.SendMessage(ctx, types.CreateMessageParams{
-		Content: fmt.Sprintf("**%s**\n\n%s", topic.Name, topic.Text),
-	}); err != nil {
+	if err := ctx.SendLinearReply(formatHelpMessage(topic), false); err != nil {
 		utils.ErrorAttrs("Failed to send help topic message",
 			slog.String("username", ctx.BaseUser().Username),
 			slog.String("name", opt),
@@ -75,10 +77,20 @@ func showHelpTopic(ctx *tempest.CommandInteraction) {
 			slog.Any("error", err),
 		)
 
-		utils.SendErrorFollowUp(
+		utils.SendErrorMessage(
 			ctx,
 			fmt.Sprintf("Failed to send help topic message %s!", opt),
 			err,
 		)
 	}
+}
+
+func formatHelpMessage(topic db.HelpTopic) string {
+	var b strings.Builder
+	b.WriteString("**")
+	b.WriteString(topic.Name)
+	b.WriteString("**\n\n")
+	b.WriteString(topic.Text)
+	b.WriteString("\n\n-# This message was created by a bot.\n-# Have a nice day.")
+	return b.String()
 }

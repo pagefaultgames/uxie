@@ -32,6 +32,7 @@ func helpTopicAutocompleteFunc(
 			return nil
 		}
 
+		// NB: Not caching this is OK for now since it only takes ~200 microsecs in total
 		topics, err := db.GetAllTopics()
 		if err != nil {
 			utils.ErrorAttrs("Error fetching topics from database for autocomplete",
@@ -45,7 +46,7 @@ func helpTopicAutocompleteFunc(
 
 		choices := make([]tempest.CommandOptionChoice, 0, len(topics))
 		for _, topic := range topics {
-			if strings.HasPrefix(topic.Name, focusedText) {
+			if strings.HasPrefix(strings.ToLower(topic.Name), strings.ToLower(focusedText)) {
 				choices = append(choices, tempest.CommandOptionChoice{
 					Name:  topic.Name,
 					Value: topic.Name,

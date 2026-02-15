@@ -1,13 +1,10 @@
 package utils
 
 import (
-	"errors"
 	"fmt"
 	"log/slog"
-	"net/http"
 
 	"github.com/amatsagu/tempest"
-	"github.com/pagefaultgames/oranguru/types"
 )
 
 // ValidateOptionValue is a helper function to extract and validate a command option's value type.
@@ -54,6 +51,8 @@ func ValidateOptionValue[T string | bool | float64](
 type anyInteraction interface {
 	SendFollowUp(content tempest.ResponseMessageData, ephemeral bool) (tempest.Message, error)
 	SendLinearFollowUp(content string, ephemeral bool) (tempest.Message, error)
+	BaseUser() *tempest.User
+	Responded() bool
 }
 
 // ensure both CommandInteraction and ModalInteraction satisfy the interface.
@@ -63,71 +62,28 @@ var (
 	_ anyInteraction = (*tempest.ModalInteraction)(nil)
 )
 
-// DeleteReplyIfExists deletes an existing reply to the current message, if one exists.
-// It returns whether the deletion was successful (which will be true if no reply existed in the first place).
-func DeleteReplyIfExists(ctx *tempest.CommandInteraction) (ok bool) {
-	if ctx.Data.TargetID == 0 {
-		return true
-	}
-	if err := ctx.DeleteReply(); err != nil {
-		ErrorAttrs("Failed to delete existing reply",
-			slog.String("username", ctx.BaseUser().Username),
-			slog.Uint64("ID", uint64(ctx.ID)),
-			slog.Any("error", err),
-		)
-		SendErrorFollowUp(ctx, "Failed to delete existing reply!", err)
-		return false
-	}
-
-	return true
-}
-
-// SendErrorFollowUp is a helper function to send a standardized error follow-up message.
-func SendErrorFollowUp[T anyInteraction](ctx T, msg string, err error) {
-	_, _ = ctx.SendLinearFollowUp(msg+"\nError:\n```\n"+err.Error()+"\n```", true)
-}
-
-var ErrMissingRequiredField = errors.New(
-	"expected at least one of content, embeds, components, or files to be present",
-)
-
-// SendMessage is a helper method to create and send a new message.
-// It returns the first error encountered.
+// SendErrorMessage is a helper function to send a standardized error follow-up message.
 //
-// Note that several fields of the message object will be altered, as follows:
-//   - AllowedMentions will be set to prevent any mentions from pinging anyone.
-//   - MessageReference will be set to match the original message's reference, if it was a reply.
-//   - Flags will have SUPPRESS_NOTIFICATIONS set.
-func SendMessage(
-	ctx *tempest.CommandInteraction,
-	message types.CreateMessageParams,
-) (err error) {
-	// Discord requires at least one of content, embeds, sticker_ids, components, files, or poll to be present.
-	if message.Content == "" && len(message.Embeds) == 0 && len(message.Components) == 0 {
-		return ErrMissingRequiredField
-	}
+// If the provided interaction has yet to provide a response to the end user, the error message will be sent as a reply/acknowledgement to avoid timeouts.
+func SendErrorMessage[T anyInteraction](ctx T, msg string, err error) {
+	msg += "\nError:\n```\n" + err.Error() + "\n```"
 
-	orig, found := ctx.Data.Resolved.Messages[ctx.Data.TargetID]
-	if found {
-		if err := ctx.DeleteReply(); err != nil {
-			return fmt.Errorf("failed to delete original message: %w", err)
+	var sendErr error
+	if ctx.Responded() {
+		_, sendErr = ctx.SendLinearFollowUp(msg, true)
+	} else {
+		switch interaction := any(ctx).(type) {
+		case *tempest.CommandInteraction:
+			sendErr = interaction.SendLinearReply(msg, true)
+		case *tempest.ModalInteraction:
+			sendErr = interaction.AcknowledgeWithLinearMessage(msg, true)
 		}
 	}
 
-	message.AllowedMentions = &tempest.AllowedMentions{
-		Parse: []tempest.AllowedMentionsType{},
+	if sendErr != nil {
+		ErrorAttrs("Failed to send error follow-up message",
+			slog.String("username", ctx.BaseUser().Username),
+			slog.Any("send_error", sendErr),
+		)
 	}
-	message.MessageReference = orig.MessageReference
-	message.Flags |= tempest.SUPPRESS_NOTIFICATIONS_MESSAGE_FLAG
-
-	DeleteReplyIfExists(ctx)
-
-	if _, err := ctx.BaseClient.Rest.Request(
-		http.MethodPost,
-		"/channels/"+ctx.ChannelID.String()+"/messages",
-		message,
-	); err != nil {
-		return fmt.Errorf("failed to send replacement message: %w", err)
-	}
-	return nil
 }

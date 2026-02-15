@@ -11,13 +11,15 @@ import (
 )
 
 // Store wraps a SQLite database that tracks registered help topics and their relevant data.
-// TODO: Implement "aliases" for topics using a separate linked database?
+// TODO: Figure out whether to make names case insensitive/enforce a particular case
 type Store struct {
 	// The underlying database connection.
 	db *sql.DB
 
 	// A map containing prepared statements for common queries.
 	statements map[statementName]*sql.Stmt
+
+	// TODO: Pass in top level context from main function (for cancellation on shutdown)
 }
 
 // statementName is a string enum used for identifying prepared statements.
@@ -35,7 +37,7 @@ const (
 	//   ON CONFLICT DO UPDATE SET text = excluded.text`
 	addHelpTopic statementName = "addHelpTopic"
 	// Delete a help topic.
-	//  `DELETE FROM topics WHERE name = ?1 RETURNING id`
+	//  `DELETE FROM topics WHERE name = ?1`
 	deleteTopic statementName = "deleteTopic"
 )
 
@@ -57,9 +59,9 @@ func (s *Store) init(ctx context.Context) error {
 	if _, err := s.db.ExecContext(ctx, `
 		CREATE TABLE IF NOT EXISTS topics (
 			id          INTEGER PRIMARY KEY,
-			name        VARCHAR NOT NULL UNIQUE,
-			text        VARCHAR NOT NULL,
-			CHECK (1 <= length(name) && length(name) <= 100 && length(text) > 0)
+			name        VARCHAR(100) NOT NULL UNIQUE,
+			text        TEXT NOT NULL,
+			CHECK (length(name) > 0 AND length(text) > 0)
 		);`); err != nil {
 		return err
 	}
@@ -92,7 +94,7 @@ func (s *Store) prepareStatements(ctx context.Context) (err error) {
 	}
 
 	s.statements[deleteTopic], err = s.db.PrepareContext(ctx, `
-		DELETE FROM topics WHERE name = ?1 RETURNING id
+		DELETE FROM topics WHERE name = ?1
 	`)
 	if err != nil {
 		return fmt.Errorf("failed to prepare deleteTopic statement: %w", err)
@@ -123,16 +125,16 @@ func (s *Store) close() (err error) {
 	return err
 }
 
-func (s *Store) getHelpTopic(name string) (topic *HelpTopic, err error) {
+func (s *Store) getHelpTopic(name string) (topic HelpTopic, err error) {
 	var (
 		cid  topicId
 		text string
 	)
 	err = s.statements[getHelpTopic].QueryRow(name).Scan(&cid, &text)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get help topic %s: %w", name, err)
+		return HelpTopic{}, fmt.Errorf("failed to get help topic %s: %w", name, err)
 	}
-	return &HelpTopic{
+	return HelpTopic{
 		id:   cid,
 		Name: name,
 		Text: text,
@@ -180,8 +182,12 @@ func (s *Store) addHelpTopic(name, text string) error {
 }
 
 func (s *Store) deleteTopic(name string) error {
-	if err := s.statements[deleteTopic].QueryRow(name).Scan(); err != nil {
+	res, err := s.statements[deleteTopic].Exec(name)
+	if err != nil {
 		return fmt.Errorf("failed to delete help topic %s from database: %w", name, err)
+	}
+	if delCount, err := res.RowsAffected(); err == nil && delCount == 0 {
+		return sql.ErrNoRows
 	}
 	return nil
 }

@@ -4,7 +4,6 @@ import (
 	"database/sql"
 	"errors"
 	"log/slog"
-	"strings"
 
 	"github.com/amatsagu/tempest"
 	"github.com/pagefaultgames/oranguru/db"
@@ -41,10 +40,6 @@ var addHelp = command{
 }
 
 func handleAddHelp(ctx *tempest.CommandInteraction) {
-	if !utils.DeleteReplyIfExists(ctx) {
-		return
-	}
-
 	topic, found := utils.ValidateOptionValue[string](ctx, "topic")
 	if !found {
 		return
@@ -67,7 +62,7 @@ func handleAddHelp(ctx *tempest.CommandInteraction) {
 			slog.Uint64("ID", uint64(ctx.ID)),
 			slog.Any("error", err),
 		)
-		utils.SendErrorFollowUp(
+		utils.SendErrorMessage(
 			ctx,
 			"Failed to check for existence of help topic "+topic+"!",
 			err,
@@ -78,11 +73,6 @@ func handleAddHelp(ctx *tempest.CommandInteraction) {
 	sendAddHelpModal(ctx, topic, modalTitle, helpText)
 }
 
-const (
-	helpTopicHeaderPre  = "### Selected Help Topic:\n`"
-	helpTopicHeaderPost = "`"
-)
-
 func sendAddHelpModal(ctx *tempest.CommandInteraction, topic, modalTitle, helpText string) {
 	err := ctx.SendModal(tempest.ResponseModalData{
 		Title:    modalTitle,
@@ -90,15 +80,17 @@ func sendAddHelpModal(ctx *tempest.CommandInteraction, topic, modalTitle, helpTe
 		Components: []tempest.ModalComponent{
 			tempest.TextDisplayComponent{
 				Type:    tempest.TEXT_DISPLAY_COMPONENT_TYPE,
-				Content: helpTopicHeaderPre + topic + helpTopicHeaderPost,
+				Content: "### Selected Help Topic:\n`" + topic + "`",
 			},
 			// TODO: Add support for more than just plaintext content in the help topic body
 			tempest.LabelComponent{
 				Type:  tempest.LABEL_COMPONENT_TYPE,
 				Label: "What text should the topic display?",
 				Component: tempest.TextInputComponent{
-					Type:     tempest.TEXT_INPUT_COMPONENT_TYPE,
-					CustomID: addHelpModalTextInputId,
+					Type: tempest.TEXT_INPUT_COMPONENT_TYPE,
+					// Store the topic name in the CustomID to retrieve later on.
+					// We cannot use the text display component as Discord removes its contents from the JSON response
+					CustomID: topic,
 					Style:    tempest.PARAGRAPH_TEXT_INPUT_STYLE,
 					Required: true,
 					Value:    helpText,
@@ -116,7 +108,7 @@ func sendAddHelpModal(ctx *tempest.CommandInteraction, topic, modalTitle, helpTe
 			slog.Uint64("ID", uint64(ctx.ID)),
 			slog.Any("error", err),
 		)
-		utils.SendErrorFollowUp(ctx, "Failed to send modal!", err)
+		utils.SendErrorMessage(ctx, "Failed to send modal!", err)
 		return
 	}
 
@@ -129,31 +121,37 @@ func sendAddHelpModal(ctx *tempest.CommandInteraction, topic, modalTitle, helpTe
 
 // addHelpTopic handles the submission of the add-help modal.
 func addHelpTopic(mtx tempest.ModalInteraction) {
-	topic := getTopicFromModal(&mtx)
-	if topic == "" {
-		utils.ErrorAttrs("Failed to extract topic from add-help modal",
-			slog.String("username", mtx.BaseUser().Username),
-			slog.Uint64("ID", uint64(mtx.ID)),
+	label, ok := mtx.Data.Components[1].(tempest.LabelComponent)
+	if !ok {
+		slog.Error("Malformed add-help modal: second component was not a label")
+		_ = mtx.AcknowledgeWithLinearMessage(
+			"Could not determine help topic from modal contents!",
+			true,
 		)
-		_, _ = mtx.SendLinearFollowUp("Could not determine help topic from modal contents!", true)
 		return
 	}
 
-	utils.InfoAttrs("Received add help modal response successfully",
-		slog.String("username", mtx.BaseUser().Username),
-		slog.String("topic", topic),
-		slog.Uint64("ID", uint64(mtx.ID)),
-	)
+	input, ok := label.Component.(tempest.TextInputComponent)
+	if !ok {
+		slog.Error("Malformed add-help modal: label component was not a text input")
+		_ = mtx.AcknowledgeWithLinearMessage(
+			"Could not determine help topic from modal contents!",
+			true,
+		)
+		return
+	}
 
-	text := mtx.GetInputValue(addHelpModalTextInputId)
+	topic := input.CustomID
+	text := input.Value
+
 	if text == "" {
-		utils.ErrorAttrs("Text not found in add-help modal",
+		utils.InfoAttrs("Text not found in add-help modal",
 			slog.String("username", mtx.BaseUser().Username),
 			slog.String("topic", topic),
 			slog.Uint64("ID", uint64(mtx.ID)),
 		)
 
-		_, _ = mtx.SendLinearFollowUp("Modal text content cannot be empty!", true)
+		_ = mtx.AcknowledgeWithLinearMessage("Modal text content cannot be empty!", true)
 		return
 	}
 
@@ -165,25 +163,18 @@ func addHelpTopic(mtx tempest.ModalInteraction) {
 			slog.Uint64("ID", uint64(mtx.ID)),
 			slog.Any("error", err),
 		)
-		utils.SendErrorFollowUp(&mtx, "Could not add help topic to database!", err)
+		utils.SendErrorMessage(&mtx, "Could not add help topic to database!", err)
 	}
 
-	_, _ = mtx.SendLinearFollowUp(
+	utils.InfoAttrs("Received add help modal response successfully",
+		slog.String("username", mtx.BaseUser().Username),
+		slog.String("topic", topic),
+		slog.Uint64("ID", uint64(mtx.ID)),
+	)
+
+	_ = mtx.AcknowledgeWithLinearMessage(
 		"Help topic `"+topic+"` successfully added to database!"+
 			"\nTo view the topic, use the `/help` command.",
 		true,
-	)
-}
-
-// getTopicFromModal extracts the help topic name from the modal's text display component.
-func getTopicFromModal(mtx *tempest.ModalInteraction) string {
-	textDisplay, ok := mtx.Data.Components[0].(tempest.TextDisplayComponent)
-	if !ok {
-		return ""
-	}
-
-	return strings.TrimSuffix(
-		strings.TrimPrefix(textDisplay.Content, helpTopicHeaderPre),
-		helpTopicHeaderPost,
 	)
 }
