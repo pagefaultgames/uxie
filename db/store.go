@@ -58,7 +58,8 @@ func (s *Store) init(ctx context.Context) error {
 		CREATE TABLE IF NOT EXISTS topics (
 			id          INTEGER PRIMARY KEY,
 			name        VARCHAR NOT NULL UNIQUE,
-			text        VARCHAR NOT NULL
+			text        VARCHAR NOT NULL,
+			CHECK (1 <= length(name) && length(name) <= 100 && length(text) > 0)
 		);`); err != nil {
 		return err
 	}

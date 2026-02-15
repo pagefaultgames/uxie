@@ -27,10 +27,13 @@ func ValidateOptionValue[T string | bool | float64](
 	topic, found = opt.(T)
 	if !found {
 		ErrorAttrs(
-			fmt.Sprintf("Invalid input type for %s command option %s!", ctx.Data.Name, optName),
+			"Invalid input type for command option",
 			slog.String("username", ctx.BaseUser().Username),
-			slog.String("type", fmt.Sprintf("%T", opt)),
 			slog.Uint64("ID", uint64(ctx.ID)),
+			slog.String("option_name", optName),
+			slog.String("type", fmt.Sprintf("%T", opt)),
+			slog.String("expected_type", fmt.Sprintf("%T", topic)),
+			slog.String("command_name", ctx.Data.Name),
 		)
 		_, _ = ctx.SendLinearFollowUp(
 			fmt.Sprintf(
