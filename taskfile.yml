@@ -43,10 +43,6 @@ tasks:
 
     method: none
 
-  air:
-    desc: Setup hot reload with air.
-    cmd: go tool github.com/air-verse/air
-    method: none
   run:
     desc: Run the Oranguru backend binary.
     cmd: go run .
