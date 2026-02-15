@@ -15,22 +15,34 @@ import (
 	"github.com/pagefaultgames/oranguru/utils"
 )
 
+// TODO: Replace these with env variables once testing is complete; these are hardcoded for now
 const (
 	// os.Getenv("DISCORD_BOT_TOKEN")
 	DISCORD_BOT_TOKEN = "MTQ2MDExODAzMjE0MjY5NjUxMA.Gqitss.QCDPINoSHlYuuKpWcd_HNBimSDGEQnuA-b9ZYE"
 	// os.Getenv("DISCORD_PUBLIC_KEY")
 	DISCORD_PUBLIC_KEY = "c4151319f2cd857e73153949f58dd05151cd4363f42201051c7c004ece35787d"
 
+	// os.Getenv("DISCORD_GUILD_ID")
 	DISCORD_GUILD_ID = "1460127335649902592"
 
+	// os.Getenv("ADDRESS")
 	ADDRESS = "localhost:8080"
 )
 
 func main() {
 	slog.Info("Creating new Tempest client...")
+
 	httpClient := tempest.NewHTTPClient(tempest.HTTPClientOptions{
 		BaseClientOptions: tempest.BaseClientOptions{
 			Token: DISCORD_BOT_TOKEN,
+			PreCommandHook: func(cmd tempest.Command, ctx *tempest.CommandInteraction) bool {
+				slog.Info("Received command interaction",
+					slog.String("username", ctx.BaseUser().Username),
+					slog.Uint64("ID", uint64(ctx.ID)),
+					slog.String("command_name", ctx.Data.Name),
+				)
+				return true
+			},
 		},
 		Trace:     true,
 		PublicKey: DISCORD_PUBLIC_KEY,
@@ -46,7 +58,9 @@ func main() {
 	}
 
 	client := commands.NewClient(httpClient)
-	if err := db.Open(); err != nil {
+
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, os.Kill)
+	if err := db.Open(ctx); err != nil {
 		utils.ErrorAttrs("Failed to open database", slog.Any("error", err))
 		panic(fmt.Sprintf("failed to open database: %v\n", err))
 	}
@@ -63,13 +77,7 @@ func main() {
 		panic(fmt.Sprintf("failed to register default commands: %v\n", err))
 	}
 
-	serveHTTP(client)
-}
-
-func serveHTTP(client *commands.Client) {
 	http.HandleFunc("POST /discord/callback", client.DiscordRequestHandler)
-
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, os.Kill)
 
 	server := &http.Server{Addr: ADDRESS}
 	slog.Info("Serving application at: " + ADDRESS + "/discord/callback")

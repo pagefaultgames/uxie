@@ -27,7 +27,7 @@ const commandRegistrationDelay = 500 * time.Millisecond
 // RegisterDefaultCommands registers all default commands to the Tempest HTTP client
 // and updates it them to the given guild.
 func (c *Client) RegisterDefaultCommands(guildID tempest.Snowflake) error {
-	for _, cmd := range defaultCommands {
+	for _, cmd := range allCommands {
 		if err := cmd.Register(c.HTTPClient); err != nil {
 			return fmt.Errorf("failed to register command %s: %w", cmd.Name, err)
 		}

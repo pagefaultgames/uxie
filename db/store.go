@@ -1,6 +1,7 @@
 package db
 
 import (
+	"context"
 	"database/sql"
 	"errors"
 	"fmt"
@@ -10,7 +11,7 @@ import (
 )
 
 // Store wraps a SQLite database that tracks registered help topics and their relevant data.
-// TODO: Implement "aliases" for topics using a separate linked database
+// TODO: Implement "aliases" for topics using a separate linked database?
 type Store struct {
 	// The underlying database connection.
 	db *sql.DB
@@ -31,7 +32,7 @@ const (
 	getAllTopics statementName = "getAllTopics"
 	// Add or update a help topic.
 	//  `INSERT INTO topics (name, text) VALUES (?1, ?2)
-	//  ON CONFLICT DO UPDATE SET text = excluded.text`
+	//   ON CONFLICT DO UPDATE SET text = excluded.text`
 	addHelpTopic statementName = "addHelpTopic"
 	// Delete a help topic.
 	//  `DELETE FROM topics WHERE name = ?1 RETURNING id`
@@ -51,9 +52,9 @@ type HelpTopic struct {
 	id topicId
 }
 
-// init initializes the database.
-func (s *Store) init() error {
-	if _, err := s.db.Exec(`
+// init initializes the database using the provided context.
+func (s *Store) init(ctx context.Context) error {
+	if _, err := s.db.ExecContext(ctx, `
 		CREATE TABLE IF NOT EXISTS topics (
 			id          INTEGER PRIMARY KEY,
 			name        VARCHAR NOT NULL UNIQUE,
@@ -61,20 +62,20 @@ func (s *Store) init() error {
 		);`); err != nil {
 		return err
 	}
-	return s.prepareStatements()
+	return s.prepareStatements(ctx)
 }
 
-// prepareStatements prepares all commonly used SQL statements.
-func (s *Store) prepareStatements() (err error) {
+// prepareStatements prepares commonly used SQL statements.
+func (s *Store) prepareStatements(ctx context.Context) (err error) {
 	s.statements = make(map[statementName]*sql.Stmt, 3)
-	s.statements[getHelpTopic], err = s.db.Prepare(`
+	s.statements[getHelpTopic], err = s.db.PrepareContext(ctx, `
 		SELECT  id, text FROM topics WHERE name = ?1
 	`)
 	if err != nil {
 		return fmt.Errorf("failed to prepare getHelpTopic statement: %w", err)
 	}
 
-	s.statements[addHelpTopic], err = s.db.Prepare(`
+	s.statements[addHelpTopic], err = s.db.PrepareContext(ctx, `
 		INSERT INTO topics (name, text) VALUES (?1, ?2)
 		ON CONFLICT DO UPDATE SET text = excluded.text
 	`)
@@ -82,14 +83,14 @@ func (s *Store) prepareStatements() (err error) {
 		return fmt.Errorf("failed to prepare addHelpTopic statement: %w", err)
 	}
 
-	s.statements[getAllTopics], err = s.db.Prepare(`
+	s.statements[getAllTopics], err = s.db.PrepareContext(ctx, `
 		SELECT id, name, text FROM topics
 	`)
 	if err != nil {
 		return fmt.Errorf("failed to prepare getAllTopics statement: %w", err)
 	}
 
-	s.statements[deleteTopic], err = s.db.Prepare(`
+	s.statements[deleteTopic], err = s.db.PrepareContext(ctx, `
 		DELETE FROM topics WHERE name = ?1 RETURNING id
 	`)
 	if err != nil {
@@ -102,7 +103,7 @@ func (s *Store) close() (err error) {
 	for name, stmt := range s.statements {
 		if stmtCloseErr := stmt.Close(); err != nil {
 			utils.ErrorAttrs(
-				"failed to close prepared statement",
+				"Failed to close prepared statement",
 				slog.String("name", string(name)),
 				slog.Any("error", stmtCloseErr),
 			)
@@ -177,13 +178,9 @@ func (s *Store) addHelpTopic(name, text string) error {
 	return nil
 }
 
-func (s *Store) deleteTopic(name string) (found bool, err error) {
-	err = s.statements[deleteTopic].QueryRow(name).Scan()
-
-	if errors.Is(err, sql.ErrNoRows) {
-		return false, nil
-	} else if err != nil {
-		return false, fmt.Errorf("failed to delete help topic %s from database: %w", name, err)
+func (s *Store) deleteTopic(name string) error {
+	if err := s.statements[deleteTopic].QueryRow(name).Scan(); err != nil {
+		return fmt.Errorf("failed to delete help topic %s from database: %w", name, err)
 	}
-	return true, nil
+	return nil
 }

@@ -1,0 +1,8 @@
+assert_lefthook_installed: true
+pre-commit:
+  commands:
+    gofmt:
+      skip: ["merge", "rebase"]
+      glob: "**/*.go"
+      run: task lint
+      stage_fixed: true

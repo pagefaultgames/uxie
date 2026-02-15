@@ -33,14 +33,18 @@ var helpCommand = command{
 }
 
 func handleHelpAutocomplete(ctx tempest.CommandInteraction) []tempest.CommandOptionChoice {
-	_, f := ctx.GetFocusedValue()
-	focusedText, ok := f.(string)
+	name, val := ctx.GetFocusedValue()
+	if name != "topic" {
+		return nil
+	}
+
+	focusedText, ok := val.(string)
 	if !ok {
 		utils.ErrorAttrs("Invalid type for help topic autocomplete option",
 			slog.String("username", ctx.BaseUser().Username),
 			slog.Uint64("ID", uint64(ctx.ID)),
 			slog.String("command_name", ctx.Data.Name),
-			slog.Any("topic", f),
+			slog.Any("value", val),
 		)
 		return nil
 	}
@@ -82,7 +86,16 @@ func showHelpTopic(ctx *tempest.CommandInteraction) {
 
 	topic, err := db.GetHelpTopic(opt)
 	if errors.Is(err, sql.ErrNoRows) {
-		_, _ = ctx.SendLinearFollowUp(fmt.Sprintf("No help topic found with name %s!", opt), true)
+		utils.InfoAttrs("Attempted to show nonexistent help topic",
+			slog.String("username", ctx.BaseUser().Username),
+			slog.String("topic", opt),
+			slog.Uint64("ID", uint64(ctx.ID)),
+			slog.String("command_name", ctx.Data.Name),
+		)
+		_, _ = ctx.SendLinearFollowUp(
+			fmt.Sprintf("Error: No help topic found with name %s!", opt),
+			true,
+		)
 		return
 	} else if err != nil {
 		utils.ErrorAttrs("Failed to retrieve help topic from database",
@@ -93,14 +106,14 @@ func showHelpTopic(ctx *tempest.CommandInteraction) {
 		)
 		utils.SendErrorFollowUp(
 			ctx,
-			fmt.Sprintf("Could not retrieve help topic %s from database!", opt),
+			fmt.Sprintf("Failed to retrieve help topic %s from database!", opt),
 			err,
 		)
 		return
 	}
 
 	// Send the actual message
-	if err := utils.SendReplacementMessage(ctx, types.CreateMessageParams{
+	if err := utils.SendMessage(ctx, types.CreateMessageParams{
 		Content: fmt.Sprintf("**%s**\n\n%s", topic.Name, topic.Text),
 	}); err != nil {
 		utils.ErrorAttrs("Failed to send help topic message",
@@ -112,7 +125,7 @@ func showHelpTopic(ctx *tempest.CommandInteraction) {
 
 		utils.SendErrorFollowUp(
 			ctx,
-			fmt.Sprintf("Could not send help topic message %s!", opt),
+			fmt.Sprintf("Failed to send help topic message %s!", opt),
 			err,
 		)
 	}

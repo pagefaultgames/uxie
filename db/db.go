@@ -1,6 +1,7 @@
 package db
 
 import (
+	"context"
 	"database/sql"
 	"errors"
 	"fmt"
@@ -15,14 +16,14 @@ const dbPath = "help.db"
 
 // Open creates (or opens) a new SQLite database at the default path, initializing it if necessary.
 // It returns any error encountered.
-func Open() error {
+func Open(ctx context.Context) error {
 	db, err := sql.Open("sqlite3", dbPath)
 	if err != nil {
 		return err
 	}
 
 	helpTopics = &Store{db: db}
-	if err := helpTopics.init(); err != nil {
+	if err := helpTopics.init(ctx); err != nil {
 		err = errors.Join(fmt.Errorf("failed to initialize database: %w", err), db.Close())
 		return err
 	}
@@ -85,12 +86,12 @@ func AddHelpTopic(name, text string) error {
 	return store.addHelpTopic(name, text)
 }
 
-// DeleteTopic deletes the named help topic, returning whether a topic was deleted and any error produced.
-// A nonexistent topic will return false, nil.
-func DeleteTopic(name string) (bool, error) {
+// DeleteTopic deletes the help topic with the given name, returning any error produced.
+// If no such topic exists, an error implementing [sql.ErrNoRows] will be returned.
+func DeleteTopic(name string) error {
 	store, err := getStore()
 	if err != nil {
-		return false, err
+		return err
 	}
 
 	return store.deleteTopic(name)
