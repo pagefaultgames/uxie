@@ -41,16 +41,7 @@ func handleDeleteTopic(ctx *tempest.CommandInteraction) {
 
 	switch {
 	case errors.Is(err, sql.ErrNoRows):
-		utils.InfoAttrs("Attempted to delete nonexistent help topic",
-			slog.String("username", ctx.BaseUser().Username),
-			slog.String("topic", topic),
-			slog.Uint64("ID", uint64(ctx.ID)),
-			slog.String("commandName", ctx.Data.Name),
-		)
-		_ = ctx.SendLinearReply(
-			fmt.Sprintf("Error: No help topic found with name %q!", topic),
-			true,
-		)
+		printNonexistentTopic(ctx, topic)
 		return
 	case err != nil:
 		utils.ErrorAttrs("Failed to delete help topic from database",

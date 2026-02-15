@@ -39,35 +39,44 @@ func SendReplyOrFollowUp[T anyInteraction](ctx T, msg string, ephemeral bool) (e
 func ValidateOptionValue[T string | bool | float64](
 	ctx *tempest.CommandInteraction,
 	optName string,
-) (topic T, found bool) {
+) (value T, found bool) {
 	opt, found := ctx.GetOptionValue(optName)
 	if !found {
-		return topic, false
+		// this should never happen in prod
+		slog.Warn(
+			fmt.Sprintf(
+				"Command option %s was not found inside command data!\nDid you forget to mark it as required?",
+				optName,
+			),
+		)
+		return value, false
 	}
 
-	topic, found = opt.(T)
-	if !found {
-		ErrorAttrs(
-			"Invalid input type for command option",
-			slog.String("username", ctx.BaseUser().Username),
-			slog.Uint64("ID", uint64(ctx.ID)),
-			slog.String("optionName", optName),
-			slog.String("type", fmt.Sprintf("%T", opt)),
-			slog.String("expected_type", fmt.Sprintf("%T", topic)),
-			slog.String("commandName", ctx.Data.Name),
-		)
-		_ = SendReplyOrFollowUp(ctx,
-			fmt.Sprintf(
-				"Option %q was of incorrect type!\nExpected a value of type %T, but received %v (type %T)!",
-				optName,
-				topic,
-				opt,
-				opt,
-			),
-			true,
-		)
+	value, found = opt.(T)
+	if found {
+		return value, true
 	}
-	return topic, found
+
+	ErrorAttrs(
+		"Invalid input type for command option",
+		slog.String("username", ctx.BaseUser().Username),
+		slog.Uint64("ID", uint64(ctx.ID)),
+		slog.String("optionName", optName),
+		slog.String("type", fmt.Sprintf("%T", opt)),
+		slog.String("expected_type", fmt.Sprintf("%T", value)),
+		slog.String("commandName", ctx.Data.Name),
+	)
+	_ = SendReplyOrFollowUp(ctx,
+		fmt.Sprintf(
+			"Option %q was of incorrect type!\nExpected a value of type %T, but received %v (type %T)!",
+			optName,
+			value,
+			opt,
+			opt,
+		),
+		true,
+	)
+	return value, false
 }
 
 // SendErrorMessage is a convenience wrapper around [GetErrorMessage] and [SendReplyOrFollowUp].
