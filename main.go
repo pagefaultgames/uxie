@@ -21,6 +21,7 @@ var (
 	DISCORD_PUBLIC_KEY = os.Getenv("DISCORD_PUBLIC_KEY")
 	DISCORD_GUILD_ID   = os.Getenv("DISCORD_GUILD_ID")
 	ADDRESS            = os.Getenv("ADDRESS")
+	DB_PATH            = os.Getenv("DB_PATH")
 )
 
 func main() {
@@ -54,7 +55,7 @@ func main() {
 	client := commands.NewClient(httpClient)
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, os.Kill)
-	if err := db.Open(ctx); err != nil {
+	if err := db.Open(ctx, DB_PATH); err != nil {
 		utils.ErrorAttrs("Failed to open database", slog.Any("error", err))
 		panic(fmt.Sprintf("failed to open database: %v\n", err))
 	}
