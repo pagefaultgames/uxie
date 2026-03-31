@@ -1,4 +1,4 @@
-# oranguru
+# uxie
 
 Staging repo for PokéRogue's help Discord bot.
 

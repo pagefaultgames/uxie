@@ -7,5 +7,5 @@ Install using the [relevant method for your OS](https://taskfile.dev/docs/instal
 
 ## Commands
 
-- `task test`: Run automated tests
+<!-- - `task test`: Run automated tests -->
 - `task lint`: Run linting/formatting
