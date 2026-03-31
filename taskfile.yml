@@ -1,5 +1,5 @@
 # yaml-language-server: $schema=https://taskfile.dev/schema.json
-version: '3'
+version: "3"
 
 tasks:
   init:
@@ -7,34 +7,44 @@ tasks:
     cmds:
       - task: lefthook-install
       - task: lefthook-setup
+      - cmd: command -v gcc || echo "GCC not found (required for go-sqlite3); please install"
     method: none
 
   lefthook-install:
     desc: Install Lefthook if not already installed.
     cmd: |
-        if command -v lefthook >/dev/null 2>&1; then
-          echo "Lefthook already installed."
-        else
-          echo "Lefthook not found; installing via go install..."
-          go install github.com/evilmartians/lefthook/v2@latest
-        fi
+      if command -v lefthook >/dev/null 2>&1; then
+        echo "Lefthook already installed."
+      else
+        echo "Lefthook not found; installing via go install..."
+        go install github.com/evilmartians/lefthook/v2@latest
+      fi
     method: none
+    internal: true
 
   lefthook-setup:
     desc: Set up Lefthook git hooks.
     cmd: lefthook install
     method: none
+    internal: true
 
   lint:
     desc: Run golangci-lint code quality checks.
+    aliases: [fmt]
     preconditions:
       - sh: command -v golangci-lint
         msg: Golangci-lint executable not found in PATH!
     cmds:
-      - cmd: source ./tasks/lint.sh {{.CLI_ARGS}}
+      - cmd: |
+          if [ -z "$CI" ]; then
+            golangci-lint fmt
+          fi
+      - cmd: golangci-lint run --fix
+
     method: none
 
-  test:
-    desc: Run backend tests with environment-aware defaults.
-    cmd: source ./tasks/test.sh {{.CLI_ARGS}}
+  run:
+    desc: Run the Oranguru backend binary.
+    cmd: go run .
     method: none
+

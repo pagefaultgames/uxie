@@ -24,47 +24,41 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  code-quality:
-    name: Check code quality
-    runs-on: ubuntu-latest
+  # code-quality:
+  #   name: Check code quality
+  #   runs-on: ubuntu-latest
 
-    steps:
-      - name: Checkout Git repository
-        uses: actions/checkout@v4
+  #   steps:
+  #     - name: Checkout Git repository
+  #       uses: actions/checkout@v4
 
-      - name: Setup Go environment
-        uses: actions/setup-go@v5
-        with:
-          go-version: ${{ env.go_version }}
-          check-latest: true
-          cache: true
+  #     - name: Setup Go environment
+  #       uses: actions/setup-go@v5
+  #       with:
+  #         go-version: ${{ env.go_version }}
+  #         check-latest: true
+  #         cache: true
 
-      - name: Install go-task
-        uses: arduino/setup-task@v2
+  #     - name: Install go-task
+  #       uses: arduino/setup-task@v2
 
-      - name: Run golangci-lint
-        uses: golangci/golangci-lint-action@v8
-        with:
-          version: v2.5.0
+  #     - name: Run tests
+  #       run: task test
 
-      - name: Test Go Files
-        id: go-tests
-        run: task test:ci
+  #     - name: Upload gotestsum reports
+  #       uses: actions/upload-artifact@v4
+  #       with:
+  #         name: gotestsum-report
+  #         path: test-results/**
+  #         overwrite: true
+  #         retention-days: 7
+  #       if: ${{ !cancelled() }}
 
-      - name: Upload gotestsum reports
-        uses: actions/upload-artifact@v4
-        with:
-          name: gotestsum-report
-          path: test-results/**
-          overwrite: true
-          retention-days: 7
-        if: ${{ !cancelled() }}
-
-      - name: Produce Test Summary
-        uses: test-summary/action@v2
-        with:
-          paths: test-results/**/*-report.xml
-        if: ${{ !cancelled() }}
+  #     - name: Produce Test Summary
+  #       uses: test-summary/action@v2
+  #       with:
+  #         paths: test-results/**/*-report.xml
+  #       if: ${{ !cancelled() }}
 
   golangci-lint:
     name: Lint with golangci

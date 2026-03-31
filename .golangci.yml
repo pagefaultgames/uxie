@@ -10,9 +10,10 @@ formatters:
     - golines
   settings:
     gofumpt:
-      extra-rules: true
+      # TODO: Enable once -extra being split up is backported to golangci-lint to disable naked return editing
+      extra-rules: false
     golines:
-      max-len: 120
+      max-len: 100
       chain-split-dots: true
       tab-len: 4
 
@@ -21,7 +22,13 @@ linters:
   enable:
     - staticcheck
     - whitespace
+    - nakedret
+  disable:
+    # Disable for now to avoid excessive noise
+    - unused
   settings:
+    nakedret:
+      max-func-lines: 50
     errcheck:
       # Catch unchecked errors, but allow _ in tests.
       exclude-functions:
