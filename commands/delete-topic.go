@@ -7,8 +7,8 @@ import (
 	"log/slog"
 
 	"github.com/amatsagu/tempest"
-	"github.com/pagefaultgames/oranguru/db"
-	"github.com/pagefaultgames/oranguru/utils"
+	"github.com/pagefaultgames/uxie/db"
+	"github.com/pagefaultgames/uxie/utils"
 )
 
 // deleteTopic deletes a help topic from the database, if it exists.

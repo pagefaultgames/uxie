@@ -6,8 +6,8 @@ import (
 	"strings"
 
 	"github.com/amatsagu/tempest"
-	"github.com/pagefaultgames/oranguru/db"
-	"github.com/pagefaultgames/oranguru/utils"
+	"github.com/pagefaultgames/uxie/db"
+	"github.com/pagefaultgames/uxie/utils"
 )
 
 // getAllTopicText fetches all help topics in the database,

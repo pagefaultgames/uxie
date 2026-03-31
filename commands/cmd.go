@@ -5,7 +5,7 @@ import (
 	"log/slog"
 
 	"github.com/amatsagu/tempest"
-	"github.com/pagefaultgames/oranguru/utils"
+	"github.com/pagefaultgames/uxie/utils"
 )
 
 type modalHandler = func(mtx tempest.ModalInteraction)

@@ -7,8 +7,8 @@ import (
 	"regexp"
 
 	"github.com/amatsagu/tempest"
-	"github.com/pagefaultgames/oranguru/db"
-	"github.com/pagefaultgames/oranguru/utils"
+	"github.com/pagefaultgames/uxie/db"
+	"github.com/pagefaultgames/uxie/utils"
 )
 
 // ID for the actual modal itself

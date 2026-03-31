@@ -40,7 +40,7 @@ func init() {
 
 	path, found := os.LookupEnv("LOG_FILE")
 	if !found {
-		path = "./tmp/logs/oranguru.log"
+		path = "./tmp/logs/uxie.log"
 	}
 	dir := filepath.Dir(path)
 	if err := os.MkdirAll(dir, 0o0755); err != nil {
@@ -53,6 +53,6 @@ func init() {
 	}
 
 	// NB: slog by default forwards to the standard library's log package
-	log.SetPrefix("[ORANGURU] ")
+	log.SetPrefix("[UXIE] ")
 	log.SetOutput(io.MultiWriter(outFile, os.Stdout))
 }

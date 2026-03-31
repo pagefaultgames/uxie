@@ -1,4 +1,4 @@
-# oranguru
+# uxie
 
 ## Repository structure
 - Discord bot written in Go using [tempest](https://github.com/amatsagu/tempest)

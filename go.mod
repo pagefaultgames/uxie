@@ -1,4 +1,4 @@
-module github.com/pagefaultgames/oranguru
+module github.com/pagefaultgames/uxie
 
 go 1.25.5
 

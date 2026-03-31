@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"log/slog"
 
-	"github.com/pagefaultgames/oranguru/utils"
+	"github.com/pagefaultgames/uxie/utils"
 )
 
 // Store wraps a SQLite database that tracks registered help topics and their relevant data.

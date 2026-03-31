@@ -11,9 +11,9 @@ import (
 	"time"
 
 	"github.com/amatsagu/tempest"
-	"github.com/pagefaultgames/oranguru/commands"
-	"github.com/pagefaultgames/oranguru/db"
-	"github.com/pagefaultgames/oranguru/utils"
+	"github.com/pagefaultgames/uxie/commands"
+	"github.com/pagefaultgames/uxie/db"
+	"github.com/pagefaultgames/uxie/utils"
 )
 
 // TODO: Replace these with env variables once testing is complete; these are hardcoded for now

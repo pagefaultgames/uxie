@@ -44,7 +44,6 @@ tasks:
     method: none
 
   run:
-    desc: Run the Oranguru backend binary.
+    desc: Run the Uxie backend binary.
     cmd: go run .
     method: none
-
