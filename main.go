@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"time"
 
 	"github.com/amatsagu/tempest"
@@ -83,10 +84,19 @@ func main() {
 	slog.Info("Serving application at: " + ADDRESS + "/discord/callback")
 
 	go func() {
-		if err := server.ListenAndServe(); err != http.ErrServerClosed {
+		if err := server.ListenAndServe(); err == http.ErrServerClosed {
+			stop()
+			return
+		}
+
+		if strings.Contains(err.Error(), "address already in use") {
+			utils.ErrorAttrs(
+				"TCP address already in use. Make sure no other instance of the server is running and that the port is free.",
+				slog.Any("error", err),
+			)
+		} else {
 			utils.ErrorAttrs("error during HTTP serving", slog.Any("error", err))
 		}
-		stop()
 	}()
 
 	<-ctx.Done()
