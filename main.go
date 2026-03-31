@@ -16,18 +16,11 @@ import (
 	"github.com/pagefaultgames/uxie/utils"
 )
 
-// TODO: Replace these with env variables once testing is complete; these are hardcoded for now
-const (
-	// os.Getenv("DISCORD_BOT_TOKEN")
-	DISCORD_BOT_TOKEN = "MTQ2MDExODAzMjE0MjY5NjUxMA.Gqitss.QCDPINoSHlYuuKpWcd_HNBimSDGEQnuA-b9ZYE"
-	// os.Getenv("DISCORD_PUBLIC_KEY")
-	DISCORD_PUBLIC_KEY = "c4151319f2cd857e73153949f58dd05151cd4363f42201051c7c004ece35787d"
-
-	// os.Getenv("DISCORD_GUILD_ID")
-	DISCORD_GUILD_ID = "1460127335649902592"
-
-	// os.Getenv("ADDRESS")
-	ADDRESS = "localhost:8080"
+var (
+	DISCORD_BOT_TOKEN  = os.Getenv("DISCORD_BOT_TOKEN")
+	DISCORD_PUBLIC_KEY = os.Getenv("DISCORD_PUBLIC_KEY")
+	DISCORD_GUILD_ID   = os.Getenv("DISCORD_GUILD_ID")
+	ADDRESS            = os.Getenv("ADDRESS")
 )
 
 func main() {
