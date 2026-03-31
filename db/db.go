@@ -6,7 +6,7 @@ import (
 	"errors"
 	"fmt"
 
-	_ "github.com/mattn/go-sqlite3"
+	_ "github.com/go-sql-driver/mysql"
 )
 
 // helpTopics is the global help topic database.
@@ -17,7 +17,7 @@ const dbPath = "help.db"
 // Open creates (or opens) a new SQLite database at the default path, initializing it if necessary.
 // It returns any error encountered.
 func Open(ctx context.Context) error {
-	db, err := sql.Open("sqlite3", dbPath)
+	db, err := sql.Open("mysql", dbPath)
 	if err != nil {
 		return err
 	}
