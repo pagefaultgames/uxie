@@ -5,9 +5,9 @@ set -eo pipefail
 rm -rf test-results
 
 # The file containing default `gotestsum` arguments.
-args_file="task-args/test-args-local.txt"
+args_file="./test-args-local.txt"
 if [ -n "$CI" ]; then
-    args_file="task-args/test-args-ci.txt"
+    args_file="./test-args-ci.txt"
 fi
 
 declare -a base_args
