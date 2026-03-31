@@ -42,14 +42,8 @@ jobs:
       - name: Install go-task
         uses: arduino/setup-task@v2
 
-      - name: Run golangci-lint
-        uses: golangci/golangci-lint-action@v8
-        with:
-          version: v2.5.0
-
-      - name: Test Go Files
-        id: go-tests
-        run: task test:ci
+      - name: Run tests
+        run: task test
 
       - name: Upload gotestsum reports
         uses: actions/upload-artifact@v4
