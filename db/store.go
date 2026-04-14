@@ -27,17 +27,16 @@ type statementName string
 
 const (
 	// Get a single help topic.
-	//  `SELECT id, text FROM topics WHERE name = ?1`
+	//  `SELECT id, text FROM topics WHERE name = ?`
 	getHelpTopic statementName = "getHelpTopic"
 	// Get all help topics.
 	//  `SELECT id, name, text FROM topics`
 	getAllTopics statementName = "getAllTopics"
 	// Add or update a help topic.
-	//  `INSERT INTO topics (name, text) VALUES (?1, ?2)
-	//   ON CONFLICT DO UPDATE SET text = excluded.text`
+	//  `REPLACE INTO topics (name, text) VALUES (?, ?)`
 	addHelpTopic statementName = "addHelpTopic"
 	// Delete a help topic.
-	//  `DELETE FROM topics WHERE name = ?1`
+	//  `DELETE FROM topics WHERE name = ?`
 	deleteTopic statementName = "deleteTopic"
 )
 
@@ -58,7 +57,7 @@ type HelpTopic struct {
 func (s *Store) init(ctx context.Context) error {
 	if _, err := s.db.ExecContext(ctx, `
 		CREATE TABLE IF NOT EXISTS topics (
-			id          INTEGER PRIMARY KEY,
+			id          INTEGER PRIMARY KEY AUTO_INCREMENT,
 			name        VARCHAR(100) NOT NULL UNIQUE,
 			text        TEXT NOT NULL,
 			CHECK (length(name) > 0 AND length(text) > 0)
@@ -72,15 +71,14 @@ func (s *Store) init(ctx context.Context) error {
 func (s *Store) prepareStatements(ctx context.Context) (err error) {
 	s.statements = make(map[statementName]*sql.Stmt, 3)
 	s.statements[getHelpTopic], err = s.db.PrepareContext(ctx, `
-		SELECT  id, text FROM topics WHERE name = ?1
+		SELECT  id, text FROM topics WHERE name = ?
 	`)
 	if err != nil {
 		return fmt.Errorf("failed to prepare getHelpTopic statement: %w", err)
 	}
 
 	s.statements[addHelpTopic], err = s.db.PrepareContext(ctx, `
-		INSERT INTO topics (name, text) VALUES (?1, ?2)
-		ON CONFLICT DO UPDATE SET text = excluded.text
+		REPLACE INTO topics (name, text) VALUES (?, ?)
 	`)
 	if err != nil {
 		return fmt.Errorf("failed to prepare addHelpTopic statement: %w", err)
@@ -94,7 +92,7 @@ func (s *Store) prepareStatements(ctx context.Context) (err error) {
 	}
 
 	s.statements[deleteTopic], err = s.db.PrepareContext(ctx, `
-		DELETE FROM topics WHERE name = ?1
+		DELETE FROM topics WHERE name = ?
 	`)
 	if err != nil {
 		return fmt.Errorf("failed to prepare deleteTopic statement: %w", err)
