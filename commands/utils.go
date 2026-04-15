@@ -41,9 +41,7 @@ func printNonexistentTopic(ctx *tempest.CommandInteraction, topicName string) {
 	)
 
 	var b strings.Builder
-	b.WriteString(
-		fmt.Sprintf("No help topic was found in the database with name %q.\n\n", topicName),
-	)
+	fmt.Fprintf(&b, "No help topic was found in the database with name %q.\n\n", topicName)
 	text, err := getAllTopicText()
 	if err == nil {
 		b.WriteString("Here are the available topics:\n\n")

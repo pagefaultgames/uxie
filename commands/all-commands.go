@@ -7,5 +7,4 @@ var allCommands = []command{
 	pingCommand,
 	getTopics,
 	deleteTopic,
-	// testModal,
 }

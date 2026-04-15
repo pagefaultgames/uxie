@@ -6,7 +6,7 @@ tool github.com/evilmartians/lefthook/v2
 
 require (
 	github.com/amatsagu/tempest v1.5.0
-	github.com/mattn/go-sqlite3 v1.14.33
+	github.com/go-sql-driver/mysql v1.9.3
 )
 
 require (
@@ -26,7 +26,6 @@ require (
 	github.com/fatih/color v1.18.0 // indirect
 	github.com/gabriel-vasile/mimetype v1.4.12 // indirect
 	github.com/go-json-experiment/json v0.0.0-20251027170946-4849db3c2f7e // indirect
-	github.com/go-sql-driver/mysql v1.9.3 // indirect
 	github.com/go-viper/mapstructure/v2 v2.4.0 // indirect
 	github.com/gobwas/glob v0.2.3 // indirect
 	github.com/goccy/go-yaml v1.19.1 // indirect
