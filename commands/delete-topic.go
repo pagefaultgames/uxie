@@ -37,7 +37,7 @@ func handleDeleteTopic(ctx *tempest.CommandInteraction) {
 		return
 	}
 
-	err := db.DeleteTopic(topic)
+	deleted, err := db.DeleteTopic(topic)
 
 	switch {
 	case errors.Is(err, sql.ErrNoRows):
@@ -60,12 +60,12 @@ func handleDeleteTopic(ctx *tempest.CommandInteraction) {
 		utils.InfoAttrs("Successfully deleted help topic from database",
 			slog.String("username", ctx.BaseUser().Username),
 			slog.String("topic", topic),
+			slog.String("text", deleted.Text),
 			slog.Uint64("ID", uint64(ctx.ID)),
-			slog.String("commandName", ctx.Data.Name),
 		)
 		_ = ctx.SendLinearReply(
 			fmt.Sprintf("Successfully deleted help topic %q from the database."+
 				"\nIt may take a few minutes to update.", topic),
-			false)
+			true)
 	}
 }

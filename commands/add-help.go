@@ -149,7 +149,7 @@ func addHelpTopic(mtx tempest.ModalInteraction) {
 	text := input.Value
 
 	if text == "" {
-		utils.InfoAttrs("Text not found in add-help modal",
+		utils.InfoAttrs("Body text not found in add-help modal",
 			slog.String("username", mtx.BaseUser().Username),
 			slog.String("topic", topic),
 			slog.Uint64("ID", uint64(mtx.ID)),
@@ -170,9 +170,10 @@ func addHelpTopic(mtx tempest.ModalInteraction) {
 		utils.SendErrorMessage(&mtx, "Could not add help topic to database!", err)
 	}
 
-	utils.InfoAttrs("Received add help modal response successfully",
+	utils.InfoAttrs("Successfully added help topic to database",
 		slog.String("username", mtx.BaseUser().Username),
 		slog.String("topic", topic),
+		slog.String("text", text),
 		slog.Uint64("ID", uint64(mtx.ID)),
 	)
 

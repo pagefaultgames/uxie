@@ -12,7 +12,7 @@ import (
 // helpTopics is the global help topic database.
 var helpTopics *Store
 
-// Open creates (or opens) a new SQLite database at the given path, initializing it if necessary.
+// Open creates (or opens) a new MySQL database at the given path, initializing it if necessary.
 // It returns any error encountered.
 func Open(ctx context.Context, dbPath string) error {
 	db, err := sql.Open("mysql", dbPath)
@@ -42,7 +42,7 @@ func Close() error {
 
 var errNoDB = errors.New("database not initialized")
 
-// Internal helper function to get the global DB store.
+// getStore is an tnternal helper function to get the global DB store.
 func getStore() (*Store, error) {
 	if helpTopics == nil || helpTopics.db == nil {
 		return nil, errNoDB
@@ -84,13 +84,13 @@ func AddHelpTopic(name, text string) error {
 	return store.addHelpTopic(name, text)
 }
 
-// DeleteTopic deletes the help topic with the given name, returning any error produced.
-// If no such topic exists, an error implementing [sql.ErrNoRows] will be returned.
-func DeleteTopic(name string) error {
+// DeleteTopic deletes the help topic with the given name, returning the deleted topic and any error produced.
+// If no topic with the given name exists, an error implementing [sql.ErrNoRows] will be returned.
+func DeleteTopic(topicName string) (HelpTopic, error) {
 	store, err := getStore()
 	if err != nil {
-		return err
+		return HelpTopic{}, err
 	}
 
-	return store.deleteTopic(name)
+	return store.deleteTopic(topicName)
 }

@@ -16,15 +16,23 @@ import (
 var helpCommand = command{
 	Command: tempest.Command{
 		Name:        "help",
-		Description: "Get help on available topics.",
+		Description: "Show help for a given topic.",
 		Type:        tempest.CHAT_INPUT_COMMAND_TYPE,
-		Options: []tempest.CommandOption{{
-			Type:         tempest.STRING_OPTION_TYPE,
-			Name:         "topic",
-			Description:  "The name of the topic to get help on.",
-			Required:     true,
-			AutoComplete: true,
-		}},
+		Options: []tempest.CommandOption{
+			{
+				Type:         tempest.STRING_OPTION_TYPE,
+				Name:         "topic",
+				Description:  "The name of the help topic to retrieve and display.",
+				Required:     true,
+				AutoComplete: true,
+			},
+			{
+				Type:        tempest.BOOLEAN_OPTION_TYPE,
+				Name:        "ephemeral",
+				Description: "Whether the help message should be ephemeral (only visible to you, default false)",
+				Required:    false,
+			},
+		},
 		AutoCompleteHandler: helpTopicAutocompleteFunc("topic"),
 		SlashCommandHandler: showHelpTopic,
 	},
@@ -34,6 +42,12 @@ func showHelpTopic(ctx *tempest.CommandInteraction) {
 	opt, found := utils.ValidateOptionValue[string](ctx, "topic")
 	if !found {
 		return
+	}
+
+	ephemeral, found := utils.ValidateOptionValue[bool](ctx, "ephemeral")
+	if !found {
+		// default to false if not provided
+		ephemeral = false
 	}
 
 	topic, err := db.GetHelpTopic(opt)
@@ -59,7 +73,7 @@ func showHelpTopic(ctx *tempest.CommandInteraction) {
 	_ = ctx.SendReply(tempest.ResponseMessageData{
 		Content:         formatHelpMessage(topic),
 		AllowedMentions: &tempest.AllowedMentions{Parse: []tempest.AllowedMentionsType{}},
-	}, true, nil)
+	}, ephemeral, nil)
 }
 
 func formatHelpMessage(topic db.HelpTopic) string {

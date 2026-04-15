@@ -22,7 +22,7 @@ func helpTopicAutocompleteFunc(
 
 		focusedText, ok := val.(string)
 		if !ok {
-			utils.ErrorAttrs("Invalid type for help topic autocomplete option",
+			utils.ErrorAttrs("Incorrect type given for help topic autocomplete option",
 				slog.String("username", ctx.BaseUser().Username),
 				slog.Uint64("ID", uint64(ctx.ID)),
 				slog.String("commandName", ctx.Data.Name),
@@ -39,9 +39,10 @@ func helpTopicAutocompleteFunc(
 				slog.String("username", ctx.BaseUser().Username),
 				slog.Uint64("ID", uint64(ctx.ID)),
 				slog.String("commandName", ctx.Data.Name),
+				slog.String("optionName", name),
 				slog.Any("error", err),
 			)
-			return []tempest.CommandOptionChoice{}
+			return nil
 		}
 
 		choices := make([]tempest.CommandOptionChoice, 0, len(topics))

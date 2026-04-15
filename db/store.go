@@ -36,14 +36,14 @@ const (
 	//  `REPLACE INTO topics (name, text) VALUES (?, ?)`
 	addHelpTopic statementName = "addHelpTopic"
 	// Delete a help topic.
-	//  `DELETE FROM topics WHERE name = ?`
+	//  `DELETE FROM topics WHERE name = ? RETURNING id, text`
 	deleteTopic statementName = "deleteTopic"
 )
 
 // A topicId is a reference to a [HelpTopic]'s rowid, used for clarity of intent.
 type topicId = int64
 
-// A HelpTopic represents a single help topic stored in the database.
+// A HelpTopic represents information about a single help topic stored in the database.
 type HelpTopic struct {
 	// The topic's name.
 	Name string
@@ -71,7 +71,7 @@ func (s *Store) init(ctx context.Context) error {
 func (s *Store) prepareStatements(ctx context.Context) (err error) {
 	s.statements = make(map[statementName]*sql.Stmt, 3)
 	s.statements[getHelpTopic], err = s.db.PrepareContext(ctx, `
-		SELECT  id, text FROM topics WHERE name = ?
+		SELECT id, text FROM topics WHERE name = ?
 	`)
 	if err != nil {
 		return fmt.Errorf("failed to prepare getHelpTopic statement: %w", err)
@@ -92,7 +92,7 @@ func (s *Store) prepareStatements(ctx context.Context) (err error) {
 	}
 
 	s.statements[deleteTopic], err = s.db.PrepareContext(ctx, `
-		DELETE FROM topics WHERE name = ?
+		DELETE FROM topics WHERE name = ? RETURNING id, text
 	`)
 	if err != nil {
 		return fmt.Errorf("failed to prepare deleteTopic statement: %w", err)
@@ -125,15 +125,15 @@ func (s *Store) close() (err error) {
 
 func (s *Store) getHelpTopic(name string) (topic HelpTopic, err error) {
 	var (
-		cid  topicId
+		id   topicId
 		text string
 	)
-	err = s.statements[getHelpTopic].QueryRow(name).Scan(&cid, &text)
+	err = s.statements[getHelpTopic].QueryRow(name).Scan(&id, &text)
 	if err != nil {
 		return HelpTopic{}, fmt.Errorf("failed to get help topic %q: %w", name, err)
 	}
 	return HelpTopic{
-		id:   cid,
+		id:   id,
 		Name: name,
 		Text: text,
 	}, nil
@@ -179,13 +179,25 @@ func (s *Store) addHelpTopic(name, text string) error {
 	return nil
 }
 
-func (s *Store) deleteTopic(name string) error {
-	res, err := s.statements[deleteTopic].Exec(name)
-	if err != nil {
-		return fmt.Errorf("failed to delete help topic %q from database: %w", name, err)
+// deleteTopic deletes the help topic with the given name, returning the deleted topic and any error produced.
+// If no topic with the given name exists, an error implementing [sql.ErrNoRows] will be returned.
+func (s *Store) deleteTopic(topicName string) (HelpTopic, error) {
+	row := s.statements[deleteTopic].QueryRow(topicName)
+	var (
+		id   topicId
+		text string
+	)
+
+	if err := row.Scan(&id, &text); err != nil {
+		return HelpTopic{}, fmt.Errorf(
+			"failed to delete help topic %q from database: %w",
+			topicName,
+			err,
+		)
 	}
-	if delCount, err := res.RowsAffected(); err == nil && delCount == 0 {
-		return sql.ErrNoRows
-	}
-	return nil
+	return HelpTopic{
+		id:   id,
+		Name: topicName,
+		Text: text,
+	}, nil
 }
