@@ -1,0 +1,8 @@
+ALTER TABLE topics
+ADD COLUMN
+    updated_at
+        TIMESTAMP(6) NOT NULL
+        DEFAULT CURRENT_TIMESTAMP(6)
+        ON UPDATE CURRENT_TIMESTAMP(6),
+        ALGORITHM=INPLACE, -- prevent locking
+        LOCK=NONE;

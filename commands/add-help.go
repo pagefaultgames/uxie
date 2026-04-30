@@ -10,6 +10,7 @@ import (
 	"errors"
 	"log/slog"
 	"regexp"
+	"time"
 
 	"github.com/amatsagu/tempest"
 	"github.com/pagefaultgames/uxie/db"
@@ -18,6 +19,19 @@ import (
 
 // ID for the actual modal itself
 const addHelpModalId = "addHelpModal"
+
+type concurrentModificationInfo struct {
+	// The user attempting to modify the database.
+	userId tempest.Snowflake
+	// The previous `updatedAt` timestamp from the database, used for the database's optimistic locking.
+	updatedAt time.Time
+}
+
+// NB: While thed database does enforce optimistic locking during the database write, having a separate structure to track who's editing what
+// allows us to improve UX.
+
+// A locker for tracking which users are currently modifying which help topics, preventing concurrent modifications to the same topics.
+var usersModifyingHelpTopics = utils.NewLocker[string, concurrentModificationInfo]()
 
 var addHelp = command{
 	Command: tempest.Command{
@@ -47,7 +61,7 @@ func handleAddHelp(ctx *tempest.CommandInteraction) {
 		return
 	}
 
-	if errMsg := checkTopicValidity(topic); errMsg != "" {
+	if errMsg := checkTopicValidity(ctx, topic); errMsg != "" {
 		_ = ctx.SendLinearReply(errMsg, true)
 		return
 	}
@@ -55,6 +69,7 @@ func handleAddHelp(ctx *tempest.CommandInteraction) {
 	var (
 		helpText   string
 		modalTitle = "Create new help topic"
+		updatedAt  = time.Now()
 	)
 
 	// Check if the command already exists, pre-filling the body if so.
@@ -62,7 +77,10 @@ func handleAddHelp(ctx *tempest.CommandInteraction) {
 	if err == nil {
 		helpText = existing.Text
 		modalTitle = "Edit existing help topic"
-	} else if !errors.Is(err, sql.ErrNoRows) {
+		updatedAt = existing.UpdatedAt
+	} else if errors.Is(err, sql.ErrNoRows) {
+		// do nothing (create a new one from scratch)
+	} else {
 		utils.ErrorAttrs("Failed to check for existing help topic in database",
 			slog.String("username", ctx.BaseUser().Username),
 			slog.String("topic", topic),
@@ -77,10 +95,33 @@ func handleAddHelp(ctx *tempest.CommandInteraction) {
 		return
 	}
 
-	sendAddHelpModal(ctx, topic, modalTitle, helpText)
+	sendAddHelpModal(ctx, topic, modalTitle, helpText, updatedAt)
 }
 
-func sendAddHelpModal(ctx *tempest.CommandInteraction, topic, modalTitle, helpText string) {
+var pingRe = regexp.MustCompile(` @`)
+
+// checkTopicValidity performs basic checks on the provided help topic, returning the error message to display to the user.
+// An empty string signifies a valid topic.
+func checkTopicValidity(ctx *tempest.CommandInteraction, topic string) (invalidMsg string) {
+	if pingRe.MatchString(topic) {
+		return "Topic names cannot contain the substring `@` to prevent unwanted mentions in help messages."
+	}
+
+	// check for concurrent modification
+	if existing, locked := usersModifyingHelpTopics.GetLock(
+		topic,
+	); locked && existing.userId != ctx.BaseUser().ID {
+		return "⚠️ User <@" + existing.userId.String() + "> is currently modifying this help topic.\nPlease wait for them to finish and try again."
+	}
+
+	return ""
+}
+
+func sendAddHelpModal(
+	ctx *tempest.CommandInteraction,
+	topic, modalTitle, helpText string,
+	updatedAt time.Time,
+) {
 	err := ctx.SendModal(tempest.ResponseModalData{
 		Title:    modalTitle,
 		CustomID: addHelpModalId,
@@ -119,6 +160,11 @@ func sendAddHelpModal(ctx *tempest.CommandInteraction, topic, modalTitle, helpTe
 		utils.SendErrorMessage(ctx, "Failed to send modal!", err)
 		return
 	}
+
+	_ = usersModifyingHelpTopics.LockWithTimeout(topic, concurrentModificationInfo{
+		userId:    ctx.BaseUser().ID,
+		updatedAt: updatedAt,
+	}, 16*time.Minute) // users have 15 minutes to submit the modal, so this should be fine
 
 	utils.InfoAttrs("Sent add help modal successfully",
 		slog.String("username", ctx.BaseUser().Username),
@@ -164,7 +210,32 @@ func addHelpTopic(mtx tempest.ModalInteraction) {
 		return
 	}
 
-	if err := db.AddHelpTopic(topic, text); err != nil {
+	// check for concurrent modification again (in case the first check failed)
+	info, ok := usersModifyingHelpTopics.GetLock(topic)
+	if !ok || info.userId != mtx.BaseUser().ID {
+		// someone else is still editing this topic
+		utils.InfoAttrs("Concurrent modification detected for help topic",
+			slog.String("topic", topic),
+			slog.String("existingUserID", info.userId.String()),
+			slog.String("currentUserID", mtx.BaseUser().ID.String()),
+		)
+
+		// TODO: Do a diff with the current database contents?
+		_ = mtx.AcknowledgeWithLinearMessage(
+			"⚠️ User <@"+info.userId.String()+"> is currently modifying this help topic.\nPlease wait for them to finish and try again."+
+				"\nYour submitted text (in case you want to save it for later):"+
+				"\n```\n"+text+"\n```",
+			true,
+		)
+		return
+	}
+
+	defer func() {
+		// release lock after we're done
+		usersModifyingHelpTopics.Unlock(topic)
+	}()
+
+	if err := db.UpsertHelpTopic(topic, text, info.updatedAt); err != nil {
 		utils.ErrorAttrs("Failed to register help topic in database",
 			slog.String("username", mtx.BaseUser().Username),
 			slog.String("topic", topic),
@@ -172,7 +243,11 @@ func addHelpTopic(mtx tempest.ModalInteraction) {
 			slog.Uint64("ID", uint64(mtx.ID)),
 			slog.Any("error", err),
 		)
-		utils.SendErrorMessage(&mtx, "Could not add help topic to database!", err)
+		_ = mtx.AcknowledgeWithLinearMessage(
+			utils.GetErrorMessage("Error adding help topic to database!", err)+
+				"\nYour submitted text (in case you want to save it for later):"+
+				"\n```\n"+text+"\n```", true)
+		return
 	}
 
 	utils.InfoAttrs("Successfully added help topic to database",
@@ -187,13 +262,4 @@ func addHelpTopic(mtx tempest.ModalInteraction) {
 			"\nTo view the topic, use the `/help` command.",
 		true,
 	)
-}
-
-var pingRe = regexp.MustCompile(` @`)
-
-func checkTopicValidity(topic string) (invalidMsg string) {
-	if pingRe.MatchString(topic) {
-		return "Topic names cannot contain the substring `@` to prevent unwanted mentions in help messages."
-	}
-	return ""
 }

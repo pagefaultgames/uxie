@@ -11,6 +11,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"time"
 
 	"github.com/pagefaultgames/uxie/utils"
 )
@@ -18,7 +19,7 @@ import (
 // Store wraps a SQLite database that tracks registered help topics and their relevant data.
 // TODO: Figure out whether to make names case insensitive/enforce a particular case
 type Store struct {
-	// The underlying database connection.
+	// The underlying connection to the HelpTopics database.
 	db *sql.DB
 
 	// A map containing prepared statements for common queries.
@@ -32,16 +33,21 @@ type statementName string
 
 const (
 	// Get a single help topic.
-	//  `SELECT id, text FROM topics WHERE name = ?`
+	//  `SELECT id, text, updated_at FROM topics WHERE name = ?`
 	getHelpTopic statementName = "getHelpTopic"
 	// Get all help topics.
-	//  `SELECT id, name, text FROM topics`
+	//  `SELECT id, name, text, updated_at FROM topics`
 	getAllTopics statementName = "getAllTopics"
-	// Add or update a help topic.
-	//  `REPLACE INTO topics (name, text) VALUES (?, ?)`
+	// Add a new help topic to the database.
+	//  `INSERT INTO topics (name, text, updatedAt) VALUES (?, ?, ?)`
 	addHelpTopic statementName = "addHelpTopic"
+	// Modify an existing help topic in the database, using the provided timestamp to verify correctness.
+	//  `UPDATE topics
+	//  SET text = ?, updated_at = CURRENT_TIMESTAMP(6)
+	//  WHERE name = ? AND updated_at = ?`
+	updateHelpTopic statementName = "updateHelpTopic"
 	// Delete a help topic.
-	//  `DELETE FROM topics WHERE name = ? RETURNING id, text`
+	//  `DELETE FROM topics WHERE name = ? RETURNING id, text, updated_at`
 	deleteTopic statementName = "deleteTopic"
 )
 
@@ -54,6 +60,8 @@ type HelpTopic struct {
 	Name string
 	// The topic's text.
 	Text string
+	// The time at which the topic was last updated.
+	UpdatedAt time.Time
 	// The topic's internal ID.
 	id topicId
 }
@@ -69,6 +77,27 @@ func (s *Store) init(ctx context.Context) error {
 		);`); err != nil {
 		return err
 	}
+
+	if _, err := s.db.ExecContext(ctx, `
+		CREATE TABLE IF NOT EXISTS schema_version (
+  			id 			TINYINT NOT NULL PRIMARY KEY DEFAULT 1,
+  			version 	INT NOT NULL,
+			CONSTRAINT one_row CHECK (id = 1)
+		);`); err != nil {
+		return err
+	}
+
+	// populate the version starting at 0 if not already present
+	if _, err := s.db.ExecContext(ctx,
+		`INSERT IGNORE INTO schema_version SET version = 0;`,
+	); err != nil {
+		return err
+	}
+
+	if err := runMigrations(ctx, s.db); err != nil {
+		return fmt.Errorf("failed to run database migrations: %w", err)
+	}
+
 	return s.prepareStatements(ctx)
 }
 
@@ -76,28 +105,37 @@ func (s *Store) init(ctx context.Context) error {
 func (s *Store) prepareStatements(ctx context.Context) (err error) {
 	s.statements = make(map[statementName]*sql.Stmt, 3)
 	s.statements[getHelpTopic], err = s.db.PrepareContext(ctx, `
-		SELECT id, text FROM topics WHERE name = ?
+		SELECT id, text, updated_at FROM topics WHERE name = ?
 	`)
 	if err != nil {
 		return fmt.Errorf("failed to prepare getHelpTopic statement: %w", err)
 	}
 
 	s.statements[addHelpTopic], err = s.db.PrepareContext(ctx, `
-		REPLACE INTO topics (name, text) VALUES (?, ?)
+		INSERT INTO topics (name, text) VALUES (?, ?)
 	`)
 	if err != nil {
 		return fmt.Errorf("failed to prepare addHelpTopic statement: %w", err)
 	}
 
+	s.statements[updateHelpTopic], err = s.db.PrepareContext(ctx, `
+		  UPDATE topics
+		  SET text = ?, updated_at = CURRENT_TIMESTAMP(6)
+		  WHERE name = ? AND updated_at = ?
+	`)
+	if err != nil {
+		return fmt.Errorf("failed to prepare updateHelpTopic statement: %w", err)
+	}
+
 	s.statements[getAllTopics], err = s.db.PrepareContext(ctx, `
-		SELECT id, name, text FROM topics
+		SELECT id, name, text, updated_at FROM topics
 	`)
 	if err != nil {
 		return fmt.Errorf("failed to prepare getAllTopics statement: %w", err)
 	}
 
 	s.statements[deleteTopic], err = s.db.PrepareContext(ctx, `
-		DELETE FROM topics WHERE name = ? RETURNING id, text
+		DELETE FROM topics WHERE name = ? RETURNING id, text, updated_at
 	`)
 	if err != nil {
 		return fmt.Errorf("failed to prepare deleteTopic statement: %w", err)
@@ -130,17 +168,19 @@ func (s *Store) close() (err error) {
 
 func (s *Store) getHelpTopic(name string) (topic HelpTopic, err error) {
 	var (
-		id   topicId
-		text string
+		id        topicId
+		text      string
+		updatedAt time.Time
 	)
-	err = s.statements[getHelpTopic].QueryRow(name).Scan(&id, &text)
+	err = s.statements[getHelpTopic].QueryRow(name).Scan(&id, &text, &updatedAt)
 	if err != nil {
 		return HelpTopic{}, fmt.Errorf("failed to get help topic %q: %w", name, err)
 	}
 	return HelpTopic{
-		id:   id,
-		Name: name,
-		Text: text,
+		id:        id,
+		Name:      name,
+		Text:      text,
+		UpdatedAt: updatedAt,
 	}, nil
 }
 
@@ -158,23 +198,27 @@ func (s *Store) getAllTopics() (topics []HelpTopic, err error) {
 
 	for rows.Next() {
 		var (
-			id   topicId
-			name string
-			text string
+			id        topicId
+			name      string
+			text      string
+			updatedAt time.Time
 		)
-		if serr := rows.Scan(&id, &name, &text); serr != nil {
+		if serr := rows.Scan(&id, &name, &text, &updatedAt); serr != nil {
 			return nil, fmt.Errorf("failed to scan help topic row: %w", serr)
 		}
 		topics = append(topics, HelpTopic{
-			id:   id,
-			Name: name,
-			Text: text,
+			id:        id,
+			Name:      name,
+			Text:      text,
+			UpdatedAt: updatedAt,
 		})
 	}
 
 	return topics, rows.Err()
 }
 
+// addHelpTopic adds a new help topic to the database.
+// If a topic with the same name already exists, it will NOT be modified.
 func (s *Store) addHelpTopic(name, text string) error {
 	_, err := s.statements[addHelpTopic].Exec(name, text)
 	if err != nil {
@@ -184,16 +228,40 @@ func (s *Store) addHelpTopic(name, text string) error {
 	return nil
 }
 
+var ErrStaleUpdate = errors.New("updatedAt time was greater")
+
+// updateHelpTopic updates the contents of an existing help topic, using the provided timestamp to verify that the topic has not been modified since it was last retrieved.
+// If the topic was modified since the provided timestamp, no update will be performed and an error implementing [errStaleUpdate] will be returned.
+//
+// An error implementing [sql.ErrNoRows] will be returned if the topic with the given name does not exist at all.
+func (s *Store) updateHelpTopic(name, text string, expectedUpdatedAt time.Time) (err error) {
+	result, err := s.statements[updateHelpTopic].Exec(text, name, expectedUpdatedAt)
+	if err != nil {
+		return fmt.Errorf("failed to update help topic %q: %w", name, err)
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("failed to get rows affected for help topic update %q: %w", name, err)
+	}
+
+	if rowsAffected == 0 {
+		return ErrStaleUpdate
+	}
+	return nil
+}
+
 // deleteTopic deletes the help topic with the given name, returning the deleted topic and any error produced.
 // If no topic with the given name exists, an error implementing [sql.ErrNoRows] will be returned.
 func (s *Store) deleteTopic(topicName string) (HelpTopic, error) {
 	row := s.statements[deleteTopic].QueryRow(topicName)
 	var (
-		id   topicId
-		text string
+		id        topicId
+		text      string
+		updatedAt time.Time
 	)
 
-	if err := row.Scan(&id, &text); err != nil {
+	if err := row.Scan(&id, &text, &updatedAt); err != nil {
 		return HelpTopic{}, fmt.Errorf(
 			"failed to delete help topic %q from database: %w",
 			topicName,
@@ -201,8 +269,9 @@ func (s *Store) deleteTopic(topicName string) (HelpTopic, error) {
 		)
 	}
 	return HelpTopic{
-		id:   id,
-		Name: topicName,
-		Text: text,
+		id:        id,
+		Name:      topicName,
+		Text:      text,
+		UpdatedAt: updatedAt,
 	}, nil
 }

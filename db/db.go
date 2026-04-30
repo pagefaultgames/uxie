@@ -10,6 +10,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"time"
 
 	_ "github.com/go-sql-driver/mysql"
 )
@@ -17,10 +18,10 @@ import (
 // helpTopics is the global help topic database.
 var helpTopics *Store
 
-// Open creates (or opens) a new MySQL database at the given path, initializing it if necessary.
+// Open creates (or opens) a new MySQL database using the given DSN, initializing it if necessary.
 // It returns any error encountered.
-func Open(ctx context.Context, dbPath string) error {
-	db, err := sql.Open("mysql", dbPath)
+func Open(ctx context.Context, dsn string) error {
+	db, err := sql.Open("mysql", dsn)
 	if err != nil {
 		return err
 	}
@@ -77,16 +78,34 @@ func GetAllTopics() ([]HelpTopic, error) {
 	return store.getAllTopics()
 }
 
-// AddHelpTopic adds a new help topic to the database.
+// UpsertHelpTopic adds a new help topic to the database, using the provided timestamp to verify that the topic has not been modified since it was last retrieved.
 // If a topic with the same name already exists, it will be overwritten.
 // (This technically makes it an UPSERT operation.)
-func AddHelpTopic(name, text string) error {
+//
+// If the topic was modified since `lastUpdatedAt`, an error implementing [ErrStaleUpdate] will be returned.
+func UpsertHelpTopic(topicName, text string, lastUpdatedAt time.Time) error {
 	store, err := getStore()
 	if err != nil {
 		return err
 	}
 
-	return store.addHelpTopic(name, text)
+	// try insert
+	err = store.addHelpTopic(topicName, text)
+	if err == nil {
+		return nil
+	} else if !errors.Is(err, sql.ErrNoRows) {
+		return fmt.Errorf("failed to add help topic to database: %w", err)
+	}
+
+	// if insert failed because the topic already exists, try update
+	err = store.updateHelpTopic(topicName, text, lastUpdatedAt)
+	if err == nil {
+		return nil
+	} else if errors.Is(err, ErrStaleUpdate) {
+		return fmt.Errorf("help topic %q was modified since last retrieval: %w", topicName, err)
+	}
+
+	return fmt.Errorf("failed to update help topic in database: %w", err)
 }
 
 // DeleteTopic deletes the help topic with the given name, returning the deleted topic and any error produced.

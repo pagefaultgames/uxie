@@ -1,0 +1,13 @@
+# SPDX-FileCopyrightText: 2026 Pagefault Games
+#
+# SPDX-License-Identifier: AGPL-3.0-or-later
+
+#:schema https://reuse.software/reuse-toml-v1.schema.json
+version = 1
+
+# Add copyright to all the migration SQL files
+[[annotations]]
+path = ["*.sql"]
+SPDX-License-Identifier = "AGPL-3.0-or-later"
+SPDX-FileCopyrightText = "2026 Pagefault Games"
+SPDX-FileContributor = "Bertie690"
