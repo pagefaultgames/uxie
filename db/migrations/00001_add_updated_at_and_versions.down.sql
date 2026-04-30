@@ -1,2 +1,2 @@
-ALTER TABLE help_topics
+ALTER TABLE topics
 DROP COLUMN updated_at;

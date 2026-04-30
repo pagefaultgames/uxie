@@ -73,8 +73,6 @@ func (s *Store) init(ctx context.Context) error {
 			id          INTEGER PRIMARY KEY AUTO_INCREMENT,
 			name        VARCHAR(100) NOT NULL UNIQUE,
 			text        TEXT NOT NULL,
-			updated_at  TIMESTAMP(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6)
-				ON UPDATE CURRENT_TIMESTAMP(6),
 			CHECK (length(name) > 0 AND length(text) > 0)
 		);`); err != nil {
 		return err
@@ -82,17 +80,25 @@ func (s *Store) init(ctx context.Context) error {
 
 	if _, err := s.db.ExecContext(ctx, `
 		CREATE TABLE IF NOT EXISTS schema_version (
-  			id 			TINYINT NOT NULL PRIMARY KEY,
+  			id 			TINYINT NOT NULL PRIMARY KEY DEFAULT 1,
   			version 	INT NOT NULL,
 			CONSTRAINT one_row CHECK (id = 1)
 		);`); err != nil {
 		return err
 	}
 
-	if err := s.prepareStatements(ctx); err != nil {
+	// populate the version starting at 0 if not already present
+	if _, err := s.db.ExecContext(ctx,
+		`INSERT IGNORE INTO schema_version SET version = 0;`,
+	); err != nil {
 		return err
 	}
-	return runMigrations(ctx, s.db)
+
+	if err := runMigrations(ctx, s.db); err != nil {
+		return fmt.Errorf("failed to run database migrations: %w", err)
+	}
+
+	return s.prepareStatements(ctx)
 }
 
 // prepareStatements prepares commonly used SQL statements.

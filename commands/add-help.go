@@ -101,15 +101,16 @@ func handleAddHelp(ctx *tempest.CommandInteraction) {
 var pingRe = regexp.MustCompile(` @`)
 
 // checkTopicValidity performs basic checks on the provided help topic, returning the error message to display to the user.
+// An empty string signifies a valid topic.
 func checkTopicValidity(ctx *tempest.CommandInteraction, topic string) (invalidMsg string) {
 	if pingRe.MatchString(topic) {
 		return "Topic names cannot contain the substring `@` to prevent unwanted mentions in help messages."
 	}
 
-	if existing, locked := usersModifyingHelpTopics.GetLocker(
+	// check for concurrent modification
+	if existing, locked := usersModifyingHelpTopics.GetLock(
 		topic,
-	); locked &&
-		existing.userId != ctx.User.ID {
+	); locked && existing.userId != ctx.BaseUser().ID {
 		return "⚠️ User <@" + existing.userId.String() + "> is currently modifying this help topic. Please wait for them to finish and try again."
 	}
 
@@ -161,7 +162,7 @@ func sendAddHelpModal(
 	}
 
 	_ = usersModifyingHelpTopics.LockWithTimeout(topic, concurrentModificationInfo{
-		userId:    ctx.User.ID,
+		userId:    ctx.BaseUser().ID,
 		updatedAt: updatedAt,
 	}, 16*time.Minute) // users have 15 minutes to submit the modal, so this should be fine
 
@@ -209,14 +210,14 @@ func addHelpTopic(mtx tempest.ModalInteraction) {
 		return
 	}
 
-	// check for concurrent modification,
-	info, ok := usersModifyingHelpTopics.GetLocker(topic)
-	if !ok || info.userId != mtx.User.ID {
-		// someone else submitted before us
+	// check for concurrent modification again (in case the first check failed)
+	info, ok := usersModifyingHelpTopics.GetLock(topic)
+	if !ok || info.userId != mtx.BaseUser().ID {
+		// someone else is still editing this topic
 		utils.InfoAttrs("Concurrent modification detected for help topic",
 			slog.String("topic", topic),
 			slog.String("existingUserID", info.userId.String()),
-			slog.String("currentUserID", mtx.User.ID.String()),
+			slog.String("currentUserID", mtx.BaseUser().ID.String()),
 		)
 
 		// TODO: Do a diff with the current database contents?

@@ -29,6 +29,7 @@ type lockerInfo[V comparable] struct {
 func NewLocker[K, V comparable]() *Locker[K, V] {
 	return &Locker[K, V]{
 		locks: make(map[K]lockerInfo[V]),
+		mu:    &sync.Mutex{},
 	}
 }
 
@@ -81,7 +82,7 @@ func (l *Locker[K, V]) Unlock(key K) {
 
 // IsLockedBy returns the value that is locking the given key, if present.
 // If the key is not currently locked, it will return the zero value of V and false.
-func (l *Locker[K, V]) GetLocker(key K) (existing V, locked bool) {
+func (l *Locker[K, V]) GetLock(key K) (existing V, locked bool) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 

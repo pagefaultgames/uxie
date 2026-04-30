@@ -10,13 +10,17 @@ import (
 	"database/sql"
 	_ "embed"
 	"fmt"
+	"log/slog"
 )
 
 // A Migration represents a single migration to be applied to the database.
 type Migration struct {
+	// The 0-indexed version of the database to apply to.
 	Version int
-	Up      string
-	Down    string
+	// The SQL query to execute when increasing the version.
+	Up string
+	// The SQL query to execute when decreasing the version.
+	Down string
 }
 
 //go:embed migrations/00001_add_updated_at_and_versions.up.sql
@@ -76,11 +80,11 @@ func runMigrations(ctx context.Context, db *sql.DB) error {
 	}
 
 	if initialVersion != schemaVersion {
-		fmt.Printf(
+		slog.Info(fmt.Sprintf(
 			"Successfully migrated database from version %d to %d\n",
 			initialVersion,
 			schemaVersion,
-		)
+		))
 	}
 	return nil
 }
