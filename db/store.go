@@ -11,6 +11,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"time"
 
 	"github.com/pagefaultgames/uxie/utils"
 )
@@ -18,7 +19,7 @@ import (
 // Store wraps a SQLite database that tracks registered help topics and their relevant data.
 // TODO: Figure out whether to make names case insensitive/enforce a particular case
 type Store struct {
-	// The underlying database connection.
+	// The underlying connection to the HelpTopics database.
 	db *sql.DB
 
 	// A map containing prepared statements for common queries.
@@ -32,16 +33,18 @@ type statementName string
 
 const (
 	// Get a single help topic.
-	//  `SELECT id, text FROM topics WHERE name = ?`
+	//  `SELECT id, text, updated_at FROM topics WHERE name = ?`
 	getHelpTopic statementName = "getHelpTopic"
 	// Get all help topics.
-	//  `SELECT id, name, text FROM topics`
+	//  `SELECT id, name, text, updated_at FROM topics`
 	getAllTopics statementName = "getAllTopics"
 	// Add or update a help topic.
-	//  `REPLACE INTO topics (name, text) VALUES (?, ?)`
+	//  `UPDATE topics
+	//  SET text = ?, updated_at = CURRENT_TIMESTAMP(6)
+	//  WHERE name = ? AND updated_at = ?`
 	addHelpTopic statementName = "addHelpTopic"
 	// Delete a help topic.
-	//  `DELETE FROM topics WHERE name = ? RETURNING id, text`
+	//  `DELETE FROM topics WHERE name = ? RETURNING id, text, updated_at`
 	deleteTopic statementName = "deleteTopic"
 )
 
@@ -54,6 +57,8 @@ type HelpTopic struct {
 	Name string
 	// The topic's text.
 	Text string
+	// The time at which the topic was last updated.
+	UpdatedAt time.Time
 	// The topic's internal ID.
 	id topicId
 }
@@ -65,39 +70,56 @@ func (s *Store) init(ctx context.Context) error {
 			id          INTEGER PRIMARY KEY AUTO_INCREMENT,
 			name        VARCHAR(100) NOT NULL UNIQUE,
 			text        TEXT NOT NULL,
+			updated_at  TIMESTAMP(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6)
+				ON UPDATE CURRENT_TIMESTAMP(6),
 			CHECK (length(name) > 0 AND length(text) > 0)
 		);`); err != nil {
 		return err
 	}
-	return s.prepareStatements(ctx)
+
+	if _, err := s.db.ExecContext(ctx, `
+		CREATE TABLE IF NOT EXISTS schema_version (
+  			id 			TINYINT NOT NULL PRIMARY KEY,
+  			version 	INT NOT NULL,
+			CONSTRAINT one_row CHECK (id = 1)
+		);`); err != nil {
+		return err
+	}
+
+	if err := s.prepareStatements(ctx); err != nil {
+		return err
+	}
+	return runMigrations(ctx, s.db)
 }
 
 // prepareStatements prepares commonly used SQL statements.
 func (s *Store) prepareStatements(ctx context.Context) (err error) {
 	s.statements = make(map[statementName]*sql.Stmt, 3)
 	s.statements[getHelpTopic], err = s.db.PrepareContext(ctx, `
-		SELECT id, text FROM topics WHERE name = ?
+		SELECT id, text, updated_at FROM topics WHERE name = ?
 	`)
 	if err != nil {
 		return fmt.Errorf("failed to prepare getHelpTopic statement: %w", err)
 	}
 
 	s.statements[addHelpTopic], err = s.db.PrepareContext(ctx, `
-		REPLACE INTO topics (name, text) VALUES (?, ?)
+		  UPDATE topics
+		  SET text = ?, updated_at = CURRENT_TIMESTAMP(6)
+		  WHERE name = ? AND updated_at = ?
 	`)
 	if err != nil {
 		return fmt.Errorf("failed to prepare addHelpTopic statement: %w", err)
 	}
 
 	s.statements[getAllTopics], err = s.db.PrepareContext(ctx, `
-		SELECT id, name, text FROM topics
+		SELECT id, name, text, updated_at FROM topics
 	`)
 	if err != nil {
 		return fmt.Errorf("failed to prepare getAllTopics statement: %w", err)
 	}
 
 	s.statements[deleteTopic], err = s.db.PrepareContext(ctx, `
-		DELETE FROM topics WHERE name = ? RETURNING id, text
+		DELETE FROM topics WHERE name = ? RETURNING id, text, updated_at
 	`)
 	if err != nil {
 		return fmt.Errorf("failed to prepare deleteTopic statement: %w", err)
@@ -130,17 +152,19 @@ func (s *Store) close() (err error) {
 
 func (s *Store) getHelpTopic(name string) (topic HelpTopic, err error) {
 	var (
-		id   topicId
-		text string
+		id        topicId
+		text      string
+		updatedAt time.Time
 	)
-	err = s.statements[getHelpTopic].QueryRow(name).Scan(&id, &text)
+	err = s.statements[getHelpTopic].QueryRow(name).Scan(&id, &text, &updatedAt)
 	if err != nil {
 		return HelpTopic{}, fmt.Errorf("failed to get help topic %q: %w", name, err)
 	}
 	return HelpTopic{
-		id:   id,
-		Name: name,
-		Text: text,
+		id:        id,
+		Name:      name,
+		Text:      text,
+		UpdatedAt: updatedAt,
 	}, nil
 }
 
@@ -158,17 +182,19 @@ func (s *Store) getAllTopics() (topics []HelpTopic, err error) {
 
 	for rows.Next() {
 		var (
-			id   topicId
-			name string
-			text string
+			id        topicId
+			name      string
+			text      string
+			updatedAt time.Time
 		)
-		if serr := rows.Scan(&id, &name, &text); serr != nil {
+		if serr := rows.Scan(&id, &name, &text, &updatedAt); serr != nil {
 			return nil, fmt.Errorf("failed to scan help topic row: %w", serr)
 		}
 		topics = append(topics, HelpTopic{
-			id:   id,
-			Name: name,
-			Text: text,
+			id:        id,
+			Name:      name,
+			Text:      text,
+			UpdatedAt: updatedAt,
 		})
 	}
 
@@ -189,11 +215,12 @@ func (s *Store) addHelpTopic(name, text string) error {
 func (s *Store) deleteTopic(topicName string) (HelpTopic, error) {
 	row := s.statements[deleteTopic].QueryRow(topicName)
 	var (
-		id   topicId
-		text string
+		id        topicId
+		text      string
+		updatedAt time.Time
 	)
 
-	if err := row.Scan(&id, &text); err != nil {
+	if err := row.Scan(&id, &text, &updatedAt); err != nil {
 		return HelpTopic{}, fmt.Errorf(
 			"failed to delete help topic %q from database: %w",
 			topicName,
@@ -201,8 +228,9 @@ func (s *Store) deleteTopic(topicName string) (HelpTopic, error) {
 		)
 	}
 	return HelpTopic{
-		id:   id,
-		Name: topicName,
-		Text: text,
+		id:        id,
+		Name:      topicName,
+		Text:      text,
+		UpdatedAt: updatedAt,
 	}, nil
 }

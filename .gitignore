@@ -1,6 +1,7 @@
 .vscode/**
 !.vscode/*.code-snippets
 !.vscode/extensions.json
+!.vscode/settings.json
 
 .zed/**
 
