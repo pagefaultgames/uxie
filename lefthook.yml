@@ -1,4 +1,9 @@
+# SPDX-FileCopyrightText: 2026 Pagefault Games
+#
+# SPDX-License-Identifier: CCO-1.0
+
 assert_lefthook_installed: true
+
 pre-commit:
   commands:
     gofmt:

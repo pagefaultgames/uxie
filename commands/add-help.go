@@ -1,3 +1,8 @@
+// SPDX-FileCopyrightText: 2026 Pagefault Games
+// SPDX-FileContributor: Bertie690
+//
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 package commands
 
 import (
@@ -17,7 +22,7 @@ const addHelpModalId = "addHelpModal"
 var addHelp = command{
 	Command: tempest.Command{
 		Name:        "add-help",
-		Description: "Add a new help topic to the database, or update an existing one's contentx.",
+		Description: "Add a new help topic to the database, or update an existing one's contents.",
 		Type:        tempest.CHAT_INPUT_COMMAND_TYPE,
 		Options: []tempest.CommandOption{
 			{
