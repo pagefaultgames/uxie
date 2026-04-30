@@ -38,11 +38,14 @@ const (
 	// Get all help topics.
 	//  `SELECT id, name, text, updated_at FROM topics`
 	getAllTopics statementName = "getAllTopics"
-	// Add or update a help topic.
+	// Add a new help topic to the database.
+	//  `INSERT INTO topics (name, text, updatedAt) VALUES (?, ?, ?)`
+	addHelpTopic statementName = "addHelpTopic"
+	// Modify an existing help topic in the database, using the provided timestamp to verify correctness.
 	//  `UPDATE topics
 	//  SET text = ?, updated_at = CURRENT_TIMESTAMP(6)
 	//  WHERE name = ? AND updated_at = ?`
-	addHelpTopic statementName = "addHelpTopic"
+	updateHelpTopic statementName = "updateHelpTopic"
 	// Delete a help topic.
 	//  `DELETE FROM topics WHERE name = ? RETURNING id, text, updated_at`
 	deleteTopic statementName = "deleteTopic"
@@ -103,12 +106,19 @@ func (s *Store) prepareStatements(ctx context.Context) (err error) {
 	}
 
 	s.statements[addHelpTopic], err = s.db.PrepareContext(ctx, `
+		INSERT INTO topics (name, text) VALUES (?, ?)
+	`)
+	if err != nil {
+		return fmt.Errorf("failed to prepare addHelpTopic statement: %w", err)
+	}
+
+	s.statements[updateHelpTopic], err = s.db.PrepareContext(ctx, `
 		  UPDATE topics
 		  SET text = ?, updated_at = CURRENT_TIMESTAMP(6)
 		  WHERE name = ? AND updated_at = ?
 	`)
 	if err != nil {
-		return fmt.Errorf("failed to prepare addHelpTopic statement: %w", err)
+		return fmt.Errorf("failed to prepare updateHelpTopic statement: %w", err)
 	}
 
 	s.statements[getAllTopics], err = s.db.PrepareContext(ctx, `
@@ -201,12 +211,37 @@ func (s *Store) getAllTopics() (topics []HelpTopic, err error) {
 	return topics, rows.Err()
 }
 
+// addHelpTopic adds a new help topic to the database.
+// If a topic with the same name already exists, it will NOT be modified.
 func (s *Store) addHelpTopic(name, text string) error {
 	_, err := s.statements[addHelpTopic].Exec(name, text)
 	if err != nil {
 		return fmt.Errorf("failed to add help topic %q to database: %w", name, err)
 	}
 
+	return nil
+}
+
+var ErrStaleUpdate = errors.New("updatedAt time was greater")
+
+// updateHelpTopic updates the contents of an existing help topic, using the provided timestamp to verify that the topic has not been modified since it was last retrieved.
+// If the topic was modified since the provided timestamp, no update will be performed and an error implementing [errStaleUpdate] will be returned.
+//
+// An error implementing [sql.ErrNoRows] will be returned if the topic with the given name does not exist at all.
+func (s *Store) updateHelpTopic(name, text string, expectedUpdatedAt time.Time) (err error) {
+	result, err := s.statements[updateHelpTopic].Exec(text, name, expectedUpdatedAt)
+	if err != nil {
+		return fmt.Errorf("failed to update help topic %q: %w", name, err)
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("failed to get rows affected for help topic update %q: %w", name, err)
+	}
+
+	if rowsAffected == 0 {
+		return ErrStaleUpdate
+	}
 	return nil
 }
 
