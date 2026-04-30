@@ -111,7 +111,7 @@ func checkTopicValidity(ctx *tempest.CommandInteraction, topic string) (invalidM
 	if existing, locked := usersModifyingHelpTopics.GetLock(
 		topic,
 	); locked && existing.userId != ctx.BaseUser().ID {
-		return "⚠️ User <@" + existing.userId.String() + "> is currently modifying this help topic. Please wait for them to finish and try again."
+		return "⚠️ User <@" + existing.userId.String() + "> is currently modifying this help topic.\nPlease wait for them to finish and try again."
 	}
 
 	return ""
@@ -222,7 +222,7 @@ func addHelpTopic(mtx tempest.ModalInteraction) {
 
 		// TODO: Do a diff with the current database contents?
 		_ = mtx.AcknowledgeWithLinearMessage(
-			"⚠️ User <@"+info.userId.String()+"> is currently modifying this help topic. Please wait for them to finish and try again."+
+			"⚠️ User <@"+info.userId.String()+"> is currently modifying this help topic.\nPlease wait for them to finish and try again."+
 				"\nYour submitted text (in case you want to save it for later):"+
 				"\n```\n"+text+"\n```",
 			true,
