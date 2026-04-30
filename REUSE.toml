@@ -19,7 +19,7 @@ path = [
     "**/*.gitattributes",
     # configuration files
     "**/.golangci.yml",
-    "./.editorconfigt",
+    "./.editorconfig",
     "**/taskfile.yml",
     "**/.vscode/**/*.json",
     "**/.zed/**/*.json",
