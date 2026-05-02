@@ -68,6 +68,7 @@ func handleAddHelp(ctx *tempest.CommandInteraction) {
 
 	var (
 		helpText   string
+		topicName  = topic
 		modalTitle = "Create new help topic"
 		updatedAt  = time.Now()
 	)
@@ -78,6 +79,7 @@ func handleAddHelp(ctx *tempest.CommandInteraction) {
 		helpText = existing.Text
 		modalTitle = "Edit existing help topic"
 		updatedAt = existing.UpdatedAt
+		topicName = existing.Name // use the existing topic name to preserve capitalization
 	} else if errors.Is(err, sql.ErrNoRows) {
 		// do nothing (create a new one from scratch)
 	} else {
@@ -95,7 +97,7 @@ func handleAddHelp(ctx *tempest.CommandInteraction) {
 		return
 	}
 
-	sendAddHelpModal(ctx, topic, modalTitle, helpText, updatedAt)
+	sendAddHelpModal(ctx, topicName, modalTitle, helpText, updatedAt)
 }
 
 var pingRe = regexp.MustCompile(` @`)
