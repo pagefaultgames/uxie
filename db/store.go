@@ -33,21 +33,21 @@ type statementName string
 
 const (
 	// Get a single help topic.
-	//  `SELECT id, text, updated_at FROM topics WHERE name = ?`
+	//  `SELECT id, name, text, updated_at FROM topics WHERE LOWER(name) = LOWER(?)`
 	getHelpTopic statementName = "getHelpTopic"
 	// Get all help topics.
 	//  `SELECT id, name, text, updated_at FROM topics`
 	getAllTopics statementName = "getAllTopics"
 	// Add a new help topic to the database.
-	//  `INSERT INTO topics (name, text, updatedAt) VALUES (?, ?, ?)`
+	//  `INSERT INTO topics (name, text, updated_at) VALUES (?, ?, ?)`
 	addHelpTopic statementName = "addHelpTopic"
 	// Modify an existing help topic in the database, using the provided timestamp to verify correctness.
 	//  `UPDATE topics
-	//  SET text = ?, updated_at = CURRENT_TIMESTAMP(6)
-	//  WHERE name = ? AND updated_at = ?`
+	//    SET text = ?, updated_at = CURRENT_TIMESTAMP(6)
+	//    WHERE LOWER(name) = LOWER(?) AND updated_at = ?`
 	updateHelpTopic statementName = "updateHelpTopic"
 	// Delete a help topic.
-	//  `DELETE FROM topics WHERE name = ? RETURNING id, text, updated_at`
+	//  `DELETE FROM topics WHERE LOWER(name) = LOWER(?) RETURNING id, name, text, updated_at`
 	deleteTopic statementName = "deleteTopic"
 )
 
@@ -105,7 +105,7 @@ func (s *Store) init(ctx context.Context) error {
 func (s *Store) prepareStatements(ctx context.Context) (err error) {
 	s.statements = make(map[statementName]*sql.Stmt, 3)
 	s.statements[getHelpTopic], err = s.db.PrepareContext(ctx, `
-		SELECT id, text, updated_at FROM topics WHERE name = ?
+		SELECT id, name, text, updated_at FROM topics WHERE LOWER(name) = LOWER(?)
 	`)
 	if err != nil {
 		return fmt.Errorf("failed to prepare getHelpTopic statement: %w", err)
@@ -121,7 +121,7 @@ func (s *Store) prepareStatements(ctx context.Context) (err error) {
 	s.statements[updateHelpTopic], err = s.db.PrepareContext(ctx, `
 		  UPDATE topics
 		  SET text = ?, updated_at = CURRENT_TIMESTAMP(6)
-		  WHERE name = ? AND updated_at = ?
+		  WHERE LOWER(name) = LOWER(?) AND updated_at = ?
 	`)
 	if err != nil {
 		return fmt.Errorf("failed to prepare updateHelpTopic statement: %w", err)
@@ -135,7 +135,7 @@ func (s *Store) prepareStatements(ctx context.Context) (err error) {
 	}
 
 	s.statements[deleteTopic], err = s.db.PrepareContext(ctx, `
-		DELETE FROM topics WHERE name = ? RETURNING id, text, updated_at
+		DELETE FROM topics WHERE LOWER(name) = LOWER(?) RETURNING id, name, text, updated_at
 	`)
 	if err != nil {
 		return fmt.Errorf("failed to prepare deleteTopic statement: %w", err)
@@ -172,7 +172,7 @@ func (s *Store) getHelpTopic(name string) (topic HelpTopic, err error) {
 		text      string
 		updatedAt time.Time
 	)
-	err = s.statements[getHelpTopic].QueryRow(name).Scan(&id, &text, &updatedAt)
+	err = s.statements[getHelpTopic].QueryRow(name).Scan(&id, &name, &text, &updatedAt)
 	if err != nil {
 		return HelpTopic{}, fmt.Errorf("failed to get help topic %q: %w", name, err)
 	}
@@ -261,7 +261,7 @@ func (s *Store) deleteTopic(topicName string) (HelpTopic, error) {
 		updatedAt time.Time
 	)
 
-	if err := row.Scan(&id, &text, &updatedAt); err != nil {
+	if err := row.Scan(&id, &topicName, &text, &updatedAt); err != nil {
 		return HelpTopic{}, fmt.Errorf(
 			"failed to delete help topic %q from database: %w",
 			topicName,
