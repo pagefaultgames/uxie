@@ -6,7 +6,10 @@
 package commands
 
 import (
+	"log/slog"
+
 	"github.com/amatsagu/tempest"
+	"github.com/pagefaultgames/uxie/utils"
 )
 
 var getTopics = command{
@@ -28,7 +31,21 @@ var getTopics = command{
 				}
 			}
 
-			text, _ := getAllTopicText()
+			text, err := getAllTopicText()
+			if err != nil {
+				utils.ErrorAttrs("Failed to retrieve help topics from database",
+					slog.String("username", ctx.BaseUser().Username),
+					slog.Uint64("ID", uint64(ctx.ID)),
+					slog.Any("error", err),
+				)
+				utils.SendErrorMessage(
+					ctx,
+					"Failed to retrieve available help topics from database!",
+					err,
+				)
+				return
+			}
+
 			_ = ctx.SendLinearReply("## Available help topics:\n"+text, ephemeral)
 		},
 	},

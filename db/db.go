@@ -20,6 +20,8 @@ var helpTopics *Store
 
 // Open creates (or opens) a new MySQL database using the given DSN, initializing it if necessary.
 // It returns any error encountered.
+//
+// Note that the provided DSN is expected to set `parseTime=true` and `loc=UTC` to allow for proper timestamp parsing.
 func Open(ctx context.Context, dsn string) error {
 	db, err := sql.Open("mysql", dsn)
 	if err != nil {
