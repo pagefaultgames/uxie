@@ -16,10 +16,10 @@ import (
 	"github.com/pagefaultgames/uxie/utils"
 )
 
-// Store wraps a SQLite database that tracks registered help topics and their relevant data.
+// Store wraps a MariaDB database that tracks registered help topics and their relevant data.
 // TODO: Figure out whether to make names case insensitive/enforce a particular case
 type Store struct {
-	// The underlying connection to the HelpTopics database.
+	// The underlying database connection.
 	db *sql.DB
 
 	// A map containing prepared statements for common queries.
@@ -28,26 +28,28 @@ type Store struct {
 	// TODO: Pass in top level context from main function (for cancellation on shutdown)
 }
 
-// statementName is a string enum used for identifying prepared statements.
+// statementName is a string enum used for identifying prepared MariaDB statements.
 type statementName string
+
+// NB: These statements always return `name` due to case folding potentially making "FOO" match "foo"
 
 const (
 	// Get a single help topic.
-	//  `SELECT id, name, text, updated_at FROM topics WHERE LOWER(name) = LOWER(?)`
+	//  `SELECT id, name, text, updated_at FROM topics WHERE name = ?`
 	getHelpTopic statementName = "getHelpTopic"
 	// Get all help topics.
 	//  `SELECT id, name, text, updated_at FROM topics`
 	getAllTopics statementName = "getAllTopics"
-	// Add a new help topic to the database.
-	//  `INSERT INTO topics (name, text, updated_at) VALUES (?, ?, ?)`
+	// Add a new help topic to the database, using the current time as a timestamp.
+	//  `INSERT INTO topics (name, text) VALUES (?, ?)`
 	addHelpTopic statementName = "addHelpTopic"
 	// Modify an existing help topic in the database, using the provided timestamp to verify correctness.
 	//  `UPDATE topics
 	//    SET text = ?, updated_at = CURRENT_TIMESTAMP(6)
-	//    WHERE LOWER(name) = LOWER(?) AND updated_at = ?`
+	//    WHERE name = ? AND updated_at = ?`
 	updateHelpTopic statementName = "updateHelpTopic"
 	// Delete a help topic.
-	//  `DELETE FROM topics WHERE LOWER(name) = LOWER(?) RETURNING id, name, text, updated_at`
+	//  `DELETE FROM topics WHERE name = ? RETURNING id, name, text, updated_at`
 	deleteTopic statementName = "deleteTopic"
 )
 
@@ -105,7 +107,7 @@ func (s *Store) init(ctx context.Context) error {
 func (s *Store) prepareStatements(ctx context.Context) (err error) {
 	s.statements = make(map[statementName]*sql.Stmt, 3)
 	s.statements[getHelpTopic], err = s.db.PrepareContext(ctx, `
-		SELECT id, name, text, updated_at FROM topics WHERE LOWER(name) = LOWER(?)
+		SELECT id, name, text, updated_at FROM topics WHERE name = ?
 	`)
 	if err != nil {
 		return fmt.Errorf("failed to prepare getHelpTopic statement: %w", err)
@@ -121,7 +123,7 @@ func (s *Store) prepareStatements(ctx context.Context) (err error) {
 	s.statements[updateHelpTopic], err = s.db.PrepareContext(ctx, `
 		  UPDATE topics
 		  SET text = ?, updated_at = CURRENT_TIMESTAMP(6)
-		  WHERE LOWER(name) = LOWER(?) AND updated_at = ?
+		  WHERE name = ? AND updated_at = ?
 	`)
 	if err != nil {
 		return fmt.Errorf("failed to prepare updateHelpTopic statement: %w", err)
@@ -135,7 +137,7 @@ func (s *Store) prepareStatements(ctx context.Context) (err error) {
 	}
 
 	s.statements[deleteTopic], err = s.db.PrepareContext(ctx, `
-		DELETE FROM topics WHERE LOWER(name) = LOWER(?) RETURNING id, name, text, updated_at
+		DELETE FROM topics WHERE name = ? RETURNING id, name, text, updated_at
 	`)
 	if err != nil {
 		return fmt.Errorf("failed to prepare deleteTopic statement: %w", err)
@@ -217,8 +219,8 @@ func (s *Store) getAllTopics() (topics []HelpTopic, err error) {
 	return topics, rows.Err()
 }
 
-// addHelpTopic adds a new help topic to the database.
-// If a topic with the same name already exists, it will NOT be modified.
+// addHelpTopic adds a new help topic with the given name and text to the database.
+// If a topic with the same name already exists, it will remain unchanged and the underlying [mysql.MySQLError] will be returned.
 func (s *Store) addHelpTopic(name, text string) error {
 	_, err := s.statements[addHelpTopic].Exec(name, text)
 	if err != nil {
@@ -228,27 +230,45 @@ func (s *Store) addHelpTopic(name, text string) error {
 	return nil
 }
 
-var ErrStaleUpdate = errors.New("updatedAt time was greater")
-
 // updateHelpTopic updates the contents of an existing help topic, using the provided timestamp to verify that the topic has not been modified since it was last retrieved.
-// If the topic was modified since the provided timestamp, no update will be performed and an error implementing [errStaleUpdate] will be returned.
+// It returns the name of the topic as it appears in the database, as well as any error produced.
 //
-// An error implementing [sql.ErrNoRows] will be returned if the topic with the given name does not exist at all.
-func (s *Store) updateHelpTopic(name, text string, expectedUpdatedAt time.Time) (err error) {
+// If the topic does not exist in the database, an error implementing [sql.ErrNoRows] will be returned.
+// If the topic was modified since the provided timestamp, an [ErrStaleTopic] will be returned.
+func (s *Store) updateHelpTopic(
+	name, text string,
+	expectedUpdatedAt time.Time,
+) (dbTopicName string, err error) {
 	result, err := s.statements[updateHelpTopic].Exec(text, name, expectedUpdatedAt)
 	if err != nil {
-		return fmt.Errorf("failed to update help topic %q: %w", name, err)
+		return "", fmt.Errorf("failed to update help topic %q in database: %w", name, err)
 	}
 
-	rowsAffected, err := result.RowsAffected()
-	if err != nil {
-		return fmt.Errorf("failed to get rows affected for help topic update %q: %w", name, err)
+	if rowsAffected, err := result.RowsAffected(); err != nil {
+		return "", fmt.Errorf(
+			"failed to get rows affected for help topic update of %q: %w",
+			name,
+			err,
+		)
+	} else if rowsAffected > 0 {
+		// successful update
+		return dbTopicName, nil
 	}
 
-	if rowsAffected == 0 {
-		return ErrStaleUpdate
+	// run a quick SELECT on update failure to narrow down nonexistent vs stale (and retrieve updated time for error handling)
+	// This WOULD be a great place to use `UPDATE... RETURNING`, but that's only supported for MariaDB 13.0 (which is in preview)
+
+	var lastUpdatedAt time.Time
+	if serr := s.db.QueryRow(`
+		SELECT name, updated_at FROM topics WHERE name = ?
+	`, name).Scan(&dbTopicName, &lastUpdatedAt); serr != nil {
+		return "", fmt.Errorf("failed to query for help topic %q: %w", name, serr)
 	}
-	return nil
+
+	return "", ErrStaleTopic{
+		DBTopicName:   dbTopicName,
+		LastUpdatedAt: lastUpdatedAt,
+	}
 }
 
 // deleteTopic deletes the help topic with the given name, returning the deleted topic and any error produced.

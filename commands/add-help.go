@@ -27,8 +27,9 @@ type concurrentModificationInfo struct {
 	updatedAt time.Time
 }
 
-// NB: While thed database does enforce optimistic locking during the database write, having a separate structure to track who's editing what
+// NB: While the database does enforce optimistic locking during the database write, having a separate structure to track who's editing what
 // allows us to improve UX.
+// The database lock serves as a "last resort" of sorts to guard against server restarts or other unexpected events.
 
 // A locker for tracking which users are currently modifying which help topics, preventing concurrent modifications to the same topics.
 var usersModifyingHelpTopics = utils.NewLocker[string, concurrentModificationInfo]()
@@ -66,6 +67,7 @@ func handleAddHelp(ctx *tempest.CommandInteraction) {
 		return
 	}
 
+	// Check if the command already exists, adjusting and pre-filling various portions of the modal if so.
 	var (
 		helpText   string
 		topicName  = topic
@@ -73,7 +75,6 @@ func handleAddHelp(ctx *tempest.CommandInteraction) {
 		updatedAt  = time.Now()
 	)
 
-	// Check if the command already exists, pre-filling the body if so.
 	existing, err := db.GetHelpTopic(topic)
 	if err == nil {
 		helpText = existing.Text
@@ -113,7 +114,7 @@ func checkTopicValidity(ctx *tempest.CommandInteraction, topic string) (invalidM
 	if existing, locked := usersModifyingHelpTopics.GetLock(
 		topic,
 	); locked && existing.userId != ctx.BaseUser().ID {
-		return "⚠️ User <@" + existing.userId.String() + "> is currently modifying this help topic.\nPlease wait for them to finish and try again."
+		return utils.ConcurrentWriteMessage(existing.userId.String())
 	}
 
 	return ""
@@ -224,7 +225,7 @@ func addHelpTopic(mtx tempest.ModalInteraction) {
 
 		// TODO: Do a diff with the current database contents?
 		_ = mtx.AcknowledgeWithLinearMessage(
-			"⚠️ User <@"+info.userId.String()+"> is currently modifying this help topic.\nPlease wait for them to finish and try again."+
+			utils.ConcurrentWriteMessage(info.userId.String())+
 				"\nYour submitted text (in case you want to save it for later):"+
 				"\n```\n"+text+"\n```",
 			true,
@@ -237,30 +238,42 @@ func addHelpTopic(mtx tempest.ModalInteraction) {
 		usersModifyingHelpTopics.Unlock(topic)
 	}()
 
-	if err := db.UpsertHelpTopic(topic, text, info.updatedAt); err != nil {
-		utils.ErrorAttrs("Failed to register help topic in database",
+	dbTopicName, inserted, err := db.UpsertHelpTopic(topic, text, info.updatedAt)
+
+	// check for db optimistic locking and give a slightly more helpful error message
+	var staleErr db.ErrStaleTopic
+	// TODO: Use errors.AsType[db.ErrStaleTopic](err) if we update to Go 1.26
+	if errors.As(err, &staleErr) {
+		utils.InfoAttrs("Failed to register help topic in database due to stale topic",
 			slog.String("username", mtx.BaseUser().Username),
 			slog.String("topic", topic),
 			slog.String("text", text),
+			slog.Time("updatedAt", staleErr.LastUpdatedAt),
+			slog.Time("expectedUpdatedAt", info.updatedAt),
 			slog.Uint64("ID", uint64(mtx.ID)),
-			slog.Any("error", err),
 		)
 		_ = mtx.AcknowledgeWithLinearMessage(
-			utils.GetErrorMessage("Error adding help topic to database!", err)+
+			utils.OptimisticLockMessage(info.updatedAt, staleErr.LastUpdatedAt)+
 				"\nYour submitted text (in case you want to save it for later):"+
-				"\n```\n"+text+"\n```", true)
+				"\n```\n"+text+"\n```",
+			true)
 		return
 	}
 
-	utils.InfoAttrs("Successfully added help topic to database",
+	opStr := "updated"
+	if inserted {
+		opStr = "added"
+	}
+
+	utils.InfoAttrs("Topic successfully "+opStr+" to database",
 		slog.String("username", mtx.BaseUser().Username),
-		slog.String("topic", topic),
+		slog.String("topic", dbTopicName),
 		slog.String("text", text),
 		slog.Uint64("ID", uint64(mtx.ID)),
 	)
 
 	_ = mtx.AcknowledgeWithLinearMessage(
-		"Help topic `"+topic+"` successfully added to database!"+
+		"Help topic `"+dbTopicName+"` successfully "+opStr+" to the database!"+
 			"\nTo view the topic, use the `/help` command.",
 		true,
 	)

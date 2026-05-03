@@ -13,7 +13,7 @@ import (
 // A Locker represents a simple concurrent lock, used to ensure exclusive access to a given resource.
 // The keys should represent the resources being locked (e.g. rows in a database), while the values can hold information required to identify the lock's owner.
 //
-// Unlike standard synchronization primitives, the locker is designed to be non-blocking.
+// Unlike standard synchronization primitives, the locker is designed to be non-blocking; callers are expected to error early if the lock cannot be acquired.
 type Locker[K, V comparable] struct {
 	locks map[K]lockerInfo[V]
 	mu    *sync.Mutex
