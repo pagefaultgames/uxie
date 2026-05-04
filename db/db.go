@@ -94,40 +94,35 @@ type ErrStaleTopic struct {
 // Callers are encouraged to perform custom handling based on LastUpdatedAt as needed.
 func (e ErrStaleTopic) Error() string {
 	return fmt.Sprintf(
-		"help topic %q was modified since %s",
+		"help topic %q was modified at %s",
 		e.DBTopicName,
 		e.LastUpdatedAt.Format(time.RFC1123),
 	)
 }
 
 // UpsertHelpTopic inserts or updates a help topic in the database, using the provided timestamp for optimistic update locking.
-// It returns the name of the topic as it now exists in the database, whether the topic was inserted or updated, and any error produced during either operation.
+// It returns whether the topic was inserted or updated, and any error produced during either operation.
 //
 // If an existing topic was modified since lastUpdatedAt, an [ErrStaleTopic] (which can be matched with [errors.AsType]) will be returned.
 func UpsertHelpTopic(
 	topicName, text string,
 	lastUpdatedAt time.Time,
-) (dbTopicName string, inserted bool, err error) {
+) (inserted bool, err error) {
 	store, err := getStore()
 	if err != nil {
-		return "", false, err
+		return false, err
 	}
 
 	// try insert
 	err = store.addHelpTopic(topicName, text)
 	if err == nil {
-		return topicName, true, nil
+		return true, nil
 	} else if !errors.Is(err, &mysql.MySQLError{Number: 1062}) { // duplicate key error code
-		return "", false, fmt.Errorf("failed to add help topic to database: %w", err)
+		return false, fmt.Errorf("failed to add help topic to database: %w", err)
 	}
 
 	// update if insert failed due to duplicate key
-	dbTopicName, err = store.updateHelpTopic(topicName, text, lastUpdatedAt)
-	if err != nil {
-		return "", false, err
-	}
-
-	return dbTopicName, false, nil
+	return false, store.updateHelpTopic(topicName, text, lastUpdatedAt)
 }
 
 // DeleteTopic deletes the help topic with the given name, returning the deleted topic and any error produced.

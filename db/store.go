@@ -231,28 +231,28 @@ func (s *Store) addHelpTopic(name, text string) error {
 }
 
 // updateHelpTopic updates the contents of an existing help topic, using the provided timestamp to verify that the topic has not been modified since it was last retrieved.
-// It returns the name of the topic as it appears in the database, as well as any error produced.
+// It returns any error produced.
 //
 // If the topic does not exist in the database, an error implementing [sql.ErrNoRows] will be returned.
 // If the topic was modified since the provided timestamp, an [ErrStaleTopic] will be returned.
 func (s *Store) updateHelpTopic(
 	name, text string,
 	expectedUpdatedAt time.Time,
-) (dbTopicName string, err error) {
+) error {
 	result, err := s.statements[updateHelpTopic].Exec(text, name, expectedUpdatedAt)
 	if err != nil {
-		return "", fmt.Errorf("failed to update help topic %q in database: %w", name, err)
+		return fmt.Errorf("failed to update help topic %q in database: %w", name, err)
 	}
 
 	if rowsAffected, err := result.RowsAffected(); err != nil {
-		return "", fmt.Errorf(
+		return fmt.Errorf(
 			"failed to get rows affected for help topic update of %q: %w",
 			name,
 			err,
 		)
 	} else if rowsAffected > 0 {
 		// successful update
-		return dbTopicName, nil
+		return nil
 	}
 
 	// run a quick SELECT on update failure to narrow down nonexistent vs stale (and retrieve updated time for error handling)
@@ -260,13 +260,13 @@ func (s *Store) updateHelpTopic(
 
 	var lastUpdatedAt time.Time
 	if serr := s.db.QueryRow(`
-		SELECT name, updated_at FROM topics WHERE name = ?
-	`, name).Scan(&dbTopicName, &lastUpdatedAt); serr != nil {
-		return "", fmt.Errorf("failed to query for help topic %q: %w", name, serr)
+		SELECT updated_at FROM topics WHERE name = ?
+	`, name).Scan(&lastUpdatedAt); serr != nil {
+		return fmt.Errorf("failed to query for help topic %q last update time: %w", name, serr)
 	}
 
-	return "", ErrStaleTopic{
-		DBTopicName:   dbTopicName,
+	return ErrStaleTopic{
+		DBTopicName:   name,
 		LastUpdatedAt: lastUpdatedAt,
 	}
 }
