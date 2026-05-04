@@ -53,7 +53,10 @@ func printNonexistentTopic(ctx *tempest.CommandInteraction, topicName string) {
 		b.WriteString(text)
 	} else {
 		b.WriteString(
-			utils.GetErrorMessage("Additionally, failed to fetch list of available topics:", err),
+			utils.GenericErrorMessage(
+				"Additionally, failed to fetch list of available topics:",
+				err,
+			),
 		)
 	}
 	_ = ctx.SendLinearReply(b.String(), true)

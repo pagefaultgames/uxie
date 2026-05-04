@@ -12,7 +12,7 @@ import (
 	"fmt"
 	"time"
 
-	_ "github.com/go-sql-driver/mysql"
+	mysql "github.com/go-sql-driver/mysql"
 )
 
 // helpTopics is the global help topic database.
@@ -50,7 +50,7 @@ func Close() error {
 
 var errNoDB = errors.New("database not initialized")
 
-// getStore is an tnternal helper function to get the global DB store.
+// getStore is an internal helper function to get the global DB store.
 func getStore() (*Store, error) {
 	if helpTopics == nil || helpTopics.db == nil {
 		return nil, errNoDB
@@ -80,34 +80,49 @@ func GetAllTopics() ([]HelpTopic, error) {
 	return store.getAllTopics()
 }
 
-// UpsertHelpTopic adds a new help topic to the database, using the provided timestamp to verify that the topic has not been modified since it was last retrieved.
-// If a topic with the same name already exists, it will be overwritten.
-// (This technically makes it an UPSERT operation.)
+// ErrStaleTopic represents an error produced by inserting a topic that was modified since last retrieved.
 //
-// If the topic was modified since `lastUpdatedAt`, an error implementing [ErrStaleUpdate] will be returned.
-func UpsertHelpTopic(topicName, text string, lastUpdatedAt time.Time) error {
+// It does not contain the expected timestamp value as callers are assumed to already have said value.
+type ErrStaleTopic struct {
+	// The name of the database topic for which an update was attempted.
+	DBTopicName string
+	// The time of the help topic's last modification within the database.
+	LastUpdatedAt time.Time
+}
+
+// Error returns a string representation of the error to implement the error interface.
+// Callers are encouraged to perform custom handling based on LastUpdatedAt as needed.
+func (e ErrStaleTopic) Error() string {
+	return fmt.Sprintf(
+		"help topic %q was modified at %s",
+		e.DBTopicName,
+		e.LastUpdatedAt.Format(time.RFC1123),
+	)
+}
+
+// UpsertHelpTopic inserts or updates a help topic in the database, using the provided timestamp for optimistic update locking.
+// It returns whether the topic was inserted or updated, and any error produced during either operation.
+//
+// If an existing topic was modified since lastUpdatedAt, an [ErrStaleTopic] (which can be matched with [errors.AsType]) will be returned.
+func UpsertHelpTopic(
+	topicName, text string,
+	lastUpdatedAt time.Time,
+) (inserted bool, err error) {
 	store, err := getStore()
 	if err != nil {
-		return err
+		return false, err
 	}
 
 	// try insert
 	err = store.addHelpTopic(topicName, text)
 	if err == nil {
-		return nil
-	} else if !errors.Is(err, sql.ErrNoRows) {
-		return fmt.Errorf("failed to add help topic to database: %w", err)
+		return true, nil
+	} else if !errors.Is(err, &mysql.MySQLError{Number: 1062}) { // duplicate key error code
+		return false, fmt.Errorf("failed to add help topic to database: %w", err)
 	}
 
-	// if insert failed because the topic already exists, try update
-	err = store.updateHelpTopic(topicName, text, lastUpdatedAt)
-	if err == nil {
-		return nil
-	} else if errors.Is(err, ErrStaleUpdate) {
-		return fmt.Errorf("help topic %q was modified since last retrieval: %w", topicName, err)
-	}
-
-	return fmt.Errorf("failed to update help topic in database: %w", err)
+	// update if insert failed due to duplicate key
+	return false, store.updateHelpTopic(topicName, text, lastUpdatedAt)
 }
 
 // DeleteTopic deletes the help topic with the given name, returning the deleted topic and any error produced.
