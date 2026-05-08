@@ -15,7 +15,10 @@ import (
 	"github.com/pagefaultgames/uxie/utils"
 )
 
-// helpTopicAutocompleteFunc returns an autocomplete handler function for the option value with the given name.
+// TODO: Set these up in a way to allow composing autocomplete handlers if or when that is desired
+
+// helpTopicAutocompleteFunc returns an autocomplete handler function for the option value with the given name
+// that matches help topic names.
 // If includeAliases is true, the autocomplete choices will include both help topics and their aliases
 // (the latter being displayed in the format "aliasName --> topicName").
 func helpTopicAutocompleteFunc(
@@ -97,6 +100,8 @@ func helpTopicAutocompleteFunc(
 	}
 }
 
+// aliasAutocompleteFunc returns an autocomplete handler function for the option value with the given name.
+// (the latter being displayed in the format "aliasName --> topicName").
 func aliasAutocompleteFunc(
 	optionName string,
 ) func(ctx tempest.CommandInteraction) []tempest.CommandOptionChoice {
