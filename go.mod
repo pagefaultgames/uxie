@@ -7,6 +7,7 @@ tool github.com/evilmartians/lefthook/v2
 require (
 	github.com/amatsagu/tempest v1.5.0
 	github.com/go-sql-driver/mysql v1.9.3
+	golang.org/x/text v0.32.0
 )
 
 require (
@@ -63,5 +64,4 @@ require (
 	golang.org/x/mod v0.31.0 // indirect
 	golang.org/x/sys v0.39.0 // indirect
 	golang.org/x/term v0.38.0 // indirect
-	golang.org/x/text v0.32.0 // indirect
 )

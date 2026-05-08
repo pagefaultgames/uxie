@@ -9,7 +9,6 @@ import (
 	"database/sql"
 	"errors"
 	"log/slog"
-	"regexp"
 	"time"
 
 	"github.com/amatsagu/tempest"
@@ -36,7 +35,7 @@ var addHelp = command{
 			{
 				Type:        tempest.STRING_OPTION_TYPE,
 				Name:        "topic",
-				Description: "The name of the help topic to create or update. Keep it short and concise!",
+				Description: "The help topic to create or update. Aliases will edit their target topic.",
 				Required:    true,
 				MinLength:   1,
 				MaxLength:   100,
@@ -55,7 +54,7 @@ func handleAddHelp(ctx *tempest.CommandInteraction) {
 		return
 	}
 
-	if errMsg := checkTopicValidity(ctx, topic); errMsg != "" {
+	if errMsg := checkTopicValidity(topic, "topic"); errMsg != "" {
 		_ = ctx.SendLinearReply(errMsg, true)
 		return
 	}
@@ -67,16 +66,16 @@ func handleAddHelp(ctx *tempest.CommandInteraction) {
 		modalTitle = "Create new help topic"
 		updatedAt  = time.Now()
 	)
-
 	existing, err := db.GetHelpTopic(topic)
-	if err == nil {
+	switch {
+	case err == nil:
 		helpText = existing.Text
 		modalTitle = "Edit existing help topic"
 		updatedAt = existing.UpdatedAt
-		topicName = existing.Name // use the existing topic name to preserve capitalization
-	} else if errors.Is(err, sql.ErrNoRows) {
+		topicName = existing.Name // use the existing topic name to preserve capitalization/aliasing
+	case errors.Is(err, sql.ErrNoRows):
 		// do nothing (create a new one from scratch)
-	} else {
+	default:
 		utils.ErrorAttrs("Failed to check for existing help topic in database",
 			slog.String("username", ctx.BaseUser().Username),
 			slog.String("topic", topic),
@@ -91,38 +90,24 @@ func handleAddHelp(ctx *tempest.CommandInteraction) {
 		return
 	}
 
-	sendAddHelpModal(ctx, topicName, modalTitle, helpText, updatedAt)
-}
-
-var pingRe = regexp.MustCompile(` @`)
-
-// checkTopicValidity performs basic checks on the provided help topic, returning the error message to display to the user.
-// An empty string signifies a valid topic.
-func checkTopicValidity(ctx *tempest.CommandInteraction, topic string) (invalidMsg string) {
-	if pingRe.MatchString(topic) {
-		return "Topic names cannot contain the substring `@` to prevent unwanted mentions in help messages."
+	// check for concurrent modification using the base topic name
+	if existing, locked := usersModifyingHelpTopics.GetLock(
+		topicName,
+	); locked && existing != ctx.BaseUser().ID {
+		_ = ctx.SendLinearReply(utils.ConcurrentWriteMessage(existing.String()), true)
+		return
 	}
 
-	// check for concurrent modification
-	// if existing, locked := usersModifyingHelpTopics.GetLock(
-	// 	topic,
-	// ); locked && existing.userId != ctx.BaseUser().ID {
-	// 	return utils.ConcurrentWriteMessage(existing.userId.String())
-	// }
-
-	return ""
+	sendAddHelpModal(ctx, topicName, modalTitle, helpText, updatedAt)
 }
 
 func sendAddHelpModal(
 	ctx *tempest.CommandInteraction,
-	topic, modalTitle, helpText string,
+	topicName, modalTitle, helpText string,
 	updatedAt time.Time,
 ) {
-	// Store the lower/upper 32 bits of the timestamp in the 2 ID fields to retrieve later on.
-	// We don't get back the text display's body (hence why we need to store the topic in a CustomID), but
-	// this allows us to keep full microsecond precision.
-	microLow := uint32(updatedAt.UnixMicro() & 0xFFFFFFFF)
-	microHigh := uint32((updatedAt.UnixMicro() >> 32) & 0xFFFFFFFF)
+	// Store the timestamp in the 2 components' ID fields
+	microLow, microHigh := convertTimestampToID(updatedAt)
 
 	err := ctx.SendModal(tempest.ResponseModalData{
 		Title:    modalTitle,
@@ -131,7 +116,7 @@ func sendAddHelpModal(
 			tempest.TextDisplayComponent{
 				ID:      microLow,
 				Type:    tempest.TEXT_DISPLAY_COMPONENT_TYPE,
-				Content: "### Selected Help Topic:\n`" + topic + "`",
+				Content: "### Selected Help Topic:\n`" + topicName + "`",
 			},
 			// TODO: Add support for more than just plaintext content in the help topic body
 			// TODO: More configuration?
@@ -142,7 +127,7 @@ func sendAddHelpModal(
 					Type: tempest.TEXT_INPUT_COMPONENT_TYPE,
 					ID:   microHigh,
 					// Store the topic name in the CustomID to retrieve later on
-					CustomID: topic,
+					CustomID: topicName,
 					Style:    tempest.PARAGRAPH_TEXT_INPUT_STYLE,
 					Required: true,
 					Value:    helpText,
@@ -156,7 +141,7 @@ func sendAddHelpModal(
 	if err != nil {
 		utils.ErrorAttrs("Failed to send add help topic modal",
 			slog.String("username", ctx.BaseUser().Username),
-			slog.String("topic", topic),
+			slog.String("topic", topicName),
 			slog.Uint64("ID", uint64(ctx.ID)),
 			slog.Any("error", err),
 		)
@@ -165,14 +150,14 @@ func sendAddHelpModal(
 	}
 
 	_ = usersModifyingHelpTopics.LockWithTimeout(
-		topic,
+		topicName,
 		ctx.BaseUser().ID,
 		16*time.Minute,
 	) // users have 15 minutes to submit the modal, so this should be fine
 
 	utils.InfoAttrs("Sent add help modal successfully",
 		slog.String("username", ctx.BaseUser().Username),
-		slog.String("topic", topic),
+		slog.String("topic", topicName),
 		slog.String("helpText", helpText),
 		slog.Uint64("ID", uint64(ctx.ID)),
 	)
@@ -211,14 +196,14 @@ func addHelpTopic(mtx tempest.ModalInteraction) {
 	}
 
 	// extract stored values from the modal
-	topic := input.CustomID
+	topicName := input.CustomID
 	text := input.Value
 	origUpdatedAt := extractTimestampFromID(textDisplay.ID, input.ID)
 
 	if text == "" {
 		utils.InfoAttrs("Body text not found in add-help modal",
 			slog.String("username", mtx.BaseUser().Username),
-			slog.String("topic", topic),
+			slog.String("topic", topicName),
 			slog.Uint64("ID", uint64(mtx.ID)),
 		)
 
@@ -227,11 +212,11 @@ func addHelpTopic(mtx tempest.ModalInteraction) {
 	}
 
 	// check for concurrent modification again (in case the first check failed)
-	userId, ok := usersModifyingHelpTopics.GetLock(topic)
+	userId, ok := usersModifyingHelpTopics.GetLock(topicName)
 	if !ok || userId != mtx.BaseUser().ID {
 		// someone else is still editing this topic
 		utils.InfoAttrs("Concurrent modification detected for help topic",
-			slog.String("topic", topic),
+			slog.String("topic", topicName),
 			slog.String("existingUserID", userId.String()),
 			slog.String("currentUserID", mtx.BaseUser().ID.String()),
 		)
@@ -248,10 +233,10 @@ func addHelpTopic(mtx tempest.ModalInteraction) {
 
 	defer func() {
 		// release lock after we're done
-		usersModifyingHelpTopics.Unlock(topic)
+		usersModifyingHelpTopics.Unlock(topicName)
 	}()
 
-	inserted, err := db.UpsertHelpTopic(topic, text, origUpdatedAt)
+	inserted, err := db.UpsertHelpTopic(topicName, text, origUpdatedAt)
 
 	// check for db optimistic locking and give a slightly more helpful error message
 	var staleErr db.ErrStaleTopic
@@ -259,7 +244,7 @@ func addHelpTopic(mtx tempest.ModalInteraction) {
 	if errors.As(err, &staleErr) {
 		utils.InfoAttrs("Failed to register help topic in database due to stale topic",
 			slog.String("username", mtx.BaseUser().Username),
-			slog.String("topic", topic),
+			slog.String("topic", topicName),
 			slog.String("text", text),
 			slog.Time("updatedAt", staleErr.LastUpdatedAt),
 			slog.Time("expectedUpdatedAt", origUpdatedAt),
@@ -274,7 +259,7 @@ func addHelpTopic(mtx tempest.ModalInteraction) {
 	} else if err != nil {
 		utils.ErrorAttrs("Failed to register help topic in database",
 			slog.String("username", mtx.BaseUser().Username),
-			slog.String("topic", topic),
+			slog.String("topic", topicName),
 			slog.String("text", text),
 			slog.Uint64("ID", uint64(mtx.ID)),
 			slog.Any("error", err),
@@ -295,22 +280,32 @@ func addHelpTopic(mtx tempest.ModalInteraction) {
 
 	utils.InfoAttrs("Topic successfully "+opStr+" to database",
 		slog.String("username", mtx.BaseUser().Username),
-		slog.String("topic", topic),
+		slog.String("topic", topicName),
 		slog.String("text", text),
 		slog.Uint64("ID", uint64(mtx.ID)),
 	)
 
 	_ = mtx.AcknowledgeWithLinearMessage(
-		"Help topic `"+topic+"` successfully "+opStr+" to the database!"+
+		"Help topic `"+topicName+"` successfully "+opStr+" to the database!"+
 			"\nTo view the topic, use the `/help` command.",
 		true,
 	)
 }
 
-// extractTimestampFromID reconstructs the original microsecond timestamp from the high and low 32-bit microsecond chunks
+// convertTimestampToID splits a timestamp into two 31-bit chunks to be stored in the component ID fields of the modal.
+// (We use 31 bits instead of 32 as Discord requires these values fit within an int32.)
+func convertTimestampToID(ti time.Time) (lo31, hi31 uint32) {
+	const idMask31 = (1<<31 - 1)
+	micro := uint64(ti.UnixMicro())
+	microLow := uint32(micro & idMask31)
+	microHigh := uint32((micro >> 31) & idMask31)
+	return microLow, microHigh
+}
+
+// extractTimestampFromID reconstructs the original microsecond timestamp from the high and low 31-bit microsecond chunks
 // stored inside the component ID fields.
 // It returns the full timestamp in UTC.
 func extractTimestampFromID(lo, hi uint32) time.Time {
-	ts := (int64(hi) << 32) | int64(lo)
-	return time.UnixMicro(ts).UTC()
+	ts := (uint64(hi) << 31) | uint64(lo)
+	return time.UnixMicro(int64(ts)).UTC()
 }
