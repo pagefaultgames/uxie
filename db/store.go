@@ -51,7 +51,7 @@ type TopicAlias struct {
 func (s *Store) init(ctx context.Context) error {
 	if _, err := s.db.ExecContext(ctx, `
 		CREATE TABLE IF NOT EXISTS topics (
-			id          SERIAL PRIMARY KEY,
+			id          INTEGER PRIMARY KEY AUTO_INCREMENT,
 			name        VARCHAR(100) NOT NULL UNIQUE,
 			text        TEXT NOT NULL,
 			CHECK (length(name) > 0 AND length(text) > 0)

@@ -93,17 +93,7 @@ func helpTopicAutocompleteFunc(
 			}
 		}
 
-		// Sort in shortest to longest, then lexicographically
-		// TODO: Change to levenshtein distance sorting eventually
-		// (which may or may not require a custom implementation)
-		slices.SortFunc(choices, func(i, j tempest.CommandOptionChoice) int {
-			if diff := len(i.Name) - len(j.Name); diff != 0 {
-				return diff
-			}
-			return strings.Compare(i.Name, j.Name)
-		})
-
-		return choices
+		return sortAndTruncateAutocompleteChoices(choices)
 	}
 }
 
@@ -154,13 +144,26 @@ func aliasAutocompleteFunc(
 			}
 		}
 
-		slices.SortFunc(choices, func(i, j tempest.CommandOptionChoice) int {
-			if diff := len(i.Name) - len(j.Name); diff != 0 {
-				return diff
-			}
-			return strings.Compare(i.Name, j.Name)
-		})
-
-		return choices
+		return sortAndTruncateAutocompleteChoices(choices)
 	}
+}
+
+func sortAndTruncateAutocompleteChoices(
+	choices []tempest.CommandOptionChoice,
+) []tempest.CommandOptionChoice {
+	// Sort in shortest to longest, then lexicographically
+	// TODO: Change to levenshtein distance sorting eventually
+	// (which may or may not require a custom implementation)
+	slices.SortFunc(choices, func(i, j tempest.CommandOptionChoice) int {
+		if diff := len(i.Name) - len(j.Name); diff != 0 {
+			return diff
+		}
+		return strings.Compare(i.Name, j.Name)
+	})
+
+	// truncate at 25 options
+	if len(choices) > MAX_AUTOCOMPLETE_CHOICES {
+		choices = choices[:MAX_AUTOCOMPLETE_CHOICES]
+	}
+	return choices
 }

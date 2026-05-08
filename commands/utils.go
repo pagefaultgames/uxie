@@ -16,13 +16,18 @@ import (
 	"github.com/pagefaultgames/uxie/utils"
 )
 
-var pingRe = regexp.MustCompile(` @`)
+var pingRe = regexp.MustCompile(`(^|\s)@`)
 
 // checkTopicValidity performs basic checks on the name of a topic or alias, returning the error message to display to the user.
 // An empty string signifies a valid topic.
-func checkTopicValidity(topic string) (invalidMsg string) {
+//
+// The provided descriptor will be used to customize the error message as applicable, and should be in lowercase for best results.
+func checkTopicValidity(topic string, descriptor string) (invalidMsg string) {
 	if pingRe.MatchString(topic) {
-		return "Topic names cannot contain the substring `@` to prevent unwanted mentions in help messages."
+		return fmt.Sprintf(
+			"%s names cannot contain the substring `@` immediately after whitespace to prevent unwanted mentions in help messages.",
+			utils.TitleCase(descriptor),
+		)
 	}
 
 	return ""

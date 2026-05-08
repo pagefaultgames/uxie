@@ -55,7 +55,7 @@ func handleAddAlias(ctx *tempest.CommandInteraction) {
 		return
 	}
 
-	if errMsg := checkTopicValidity(alias); errMsg != "" {
+	if errMsg := checkTopicValidity(alias, "alias"); errMsg != "" {
 		_ = ctx.SendLinearReply(errMsg, true)
 		return
 	}
