@@ -229,7 +229,7 @@ func (s *Store) deleteTopic(topicName string) (deleted HelpTopic, err error) {
 	return deleted, nil
 }
 
-// ErrDuplicateAlias represents the error produced when attempting to create a help topic alias whose name comflicts with an existing alias or topic.
+// ErrDuplicateAlias represents the error produced when attempting to create a help topic alias whose name conflicts with an existing alias or topic.
 type ErrDuplicateAlias struct {
 	// The name of the alias that caused the conflict.
 	AliasName string
@@ -240,7 +240,7 @@ type ErrDuplicateAlias struct {
 
 // Error implements the error interface.
 func (e ErrDuplicateAlias) Error() string {
-	if e.OtherAliasTarget != "" {
+	if e.OtherAliasTarget == "" {
 		return fmt.Sprintf(
 			"a help topic with name %q already exists",
 			e.AliasName,

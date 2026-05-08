@@ -32,19 +32,8 @@ var getTopics = command{
 			},
 		},
 		SlashCommandHandler: func(ctx *tempest.CommandInteraction) {
-			ephemeral := true
-			if len(ctx.Data.Options) > 0 {
-				if v, ok := ctx.Data.Options[0].Value.(bool); ok {
-					ephemeral = v
-				}
-			}
-
-			includeAliases := false
-			if len(ctx.Data.Options) > 1 {
-				if v, ok := ctx.Data.Options[1].Value.(bool); ok {
-					includeAliases = v
-				}
-			}
+			ephemeral := utils.GetOptionOrDefault(ctx, "ephemeral", true)
+			includeAliases := utils.GetOptionOrDefault(ctx, "include-aliases", false)
 
 			text, err := getAllTopicText(includeAliases)
 			if err != nil {
