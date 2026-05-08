@@ -36,7 +36,7 @@ var addAlias = command{
 				Description: "The alternate name to add for the given help topic.",
 				Required:    true,
 				MinLength:   1,
-				MaxLength:   MAX_TOPIC_NAME_LENGTH,
+				MaxLength:   MAX_ALIAS_NAME_LENGTH,
 			},
 		},
 		AutoCompleteHandler: helpTopicAutocompleteFunc("topic", false),
