@@ -38,7 +38,7 @@ var helpCommand = command{
 				Required:    false,
 			},
 		},
-		AutoCompleteHandler: helpTopicAutocompleteFunc("topic"),
+		AutoCompleteHandler: helpTopicAutocompleteFunc("topic", true),
 		SlashCommandHandler: showHelpTopic,
 	},
 }

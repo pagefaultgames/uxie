@@ -13,6 +13,7 @@ import (
 	"log/slog"
 	"time"
 
+	mysql "github.com/go-sql-driver/mysql"
 	"github.com/pagefaultgames/uxie/utils"
 )
 
@@ -30,7 +31,7 @@ type topicId = int64
 
 // A HelpTopic represents information about a single help topic stored in the database.
 type HelpTopic struct {
-	// The topic's name.
+	// The topic's name; is guaranteed to be nonempty.
 	Name string
 	// The topic's text.
 	Text string
@@ -40,11 +41,17 @@ type HelpTopic struct {
 	id topicId
 }
 
+// TopicAlias represents a user-facing alias for a help topic.
+type TopicAlias struct {
+	AliasName string
+	TopicName string
+}
+
 // init initializes the database using the provided context.
 func (s *Store) init(ctx context.Context) error {
 	if _, err := s.db.ExecContext(ctx, `
 		CREATE TABLE IF NOT EXISTS topics (
-			id          INTEGER PRIMARY KEY AUTO_INCREMENT,
+			id          SERIAL PRIMARY KEY,
 			name        VARCHAR(100) NOT NULL UNIQUE,
 			text        TEXT NOT NULL,
 			CHECK (length(name) > 0 AND length(text) > 0)
@@ -83,24 +90,17 @@ func (s *Store) close() error {
 	return nil
 }
 
+// getHelpTopic retrieves the help topic with the given name, if it exists.
+// If no topic exists with the given name, an error implementing [sql.ErrNoRows] will be returned.
 func (s *Store) getHelpTopic(name string) (topic HelpTopic, err error) {
-	var (
-		id        topicId
-		text      string
-		updatedAt time.Time
-	)
 	err = s.db.QueryRow(`
 		SELECT id, name, text, updated_at FROM topics WHERE name = ?
-	`, name).Scan(&id, &name, &text, &updatedAt)
+	`, name).Scan(&topic.id, &topic.Name, &topic.Text, &topic.UpdatedAt)
 	if err != nil {
 		return HelpTopic{}, fmt.Errorf("failed to get help topic %q: %w", name, err)
 	}
-	return HelpTopic{
-		id:        id,
-		Name:      name,
-		Text:      text,
-		UpdatedAt: updatedAt,
-	}, nil
+
+	return topic, nil
 }
 
 func (s *Store) getAllTopics() (topics []HelpTopic, err error) {
@@ -118,24 +118,41 @@ func (s *Store) getAllTopics() (topics []HelpTopic, err error) {
 	}()
 
 	for rows.Next() {
-		var (
-			id        topicId
-			name      string
-			text      string
-			updatedAt time.Time
-		)
-		if serr := rows.Scan(&id, &name, &text, &updatedAt); serr != nil {
+		var topic HelpTopic
+		if serr := rows.Scan(&topic.id, &topic.Name, &topic.Text, &topic.UpdatedAt); serr != nil {
 			return nil, fmt.Errorf("failed to scan help topic row: %w", serr)
 		}
-		topics = append(topics, HelpTopic{
-			id:        id,
-			Name:      name,
-			Text:      text,
-			UpdatedAt: updatedAt,
-		})
+		topics = append(topics, topic)
 	}
 
 	return topics, rows.Err()
+}
+
+func (s *Store) getAllAliases() (aliases []TopicAlias, err error) {
+	rows, err := s.db.Query(`
+		SELECT a.alias_name, t.name
+		FROM topic_aliases a
+		JOIN topics t ON t.id = a.topic_id
+	`)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query topic aliases: %w", err)
+	}
+	defer func() {
+		if cerr := rows.Close(); cerr != nil {
+			utils.ErrorAttrs("failed to close db rows query", slog.Any("error", cerr))
+			err = errors.Join(err, fmt.Errorf("failed to close db rows query: %w", cerr))
+		}
+	}()
+
+	for rows.Next() {
+		var alias TopicAlias
+		if serr := rows.Scan(&alias.AliasName, &alias.TopicName); serr != nil {
+			return nil, fmt.Errorf("failed to scan topic alias row: %w", serr)
+		}
+		aliases = append(aliases, alias)
+	}
+
+	return aliases, rows.Err()
 }
 
 // addHelpTopic adds a new help topic with the given name and text to the database.
@@ -198,26 +215,144 @@ func (s *Store) updateHelpTopic(
 
 // deleteTopic deletes the help topic with the given name, returning the deleted topic and any error produced.
 // If no topic with the given name exists, an error implementing [sql.ErrNoRows] will be returned.
-func (s *Store) deleteTopic(topicName string) (HelpTopic, error) {
-	row := s.db.QueryRow(`
+func (s *Store) deleteTopic(topicName string) (deleted HelpTopic, err error) {
+	err = s.db.QueryRow(`
 		DELETE FROM topics WHERE name = ? RETURNING id, name, text, updated_at
-	`, topicName)
-	var (
-		id        topicId
-		text      string
-		updatedAt time.Time
-	)
-
-	if err := row.Scan(&id, &topicName, &text, &updatedAt); err != nil {
+	`, topicName).Scan(&deleted.id, &deleted.Name, &deleted.Text, &deleted.UpdatedAt)
+	if err != nil {
 		return HelpTopic{}, fmt.Errorf(
 			"failed to delete help topic %q from database: %w",
 			topicName,
 			err,
 		)
 	}
+	return deleted, nil
+}
+
+// ErrDuplicateAlias represents the error produced when attempting to create a help topic alias whose name comflicts with an existing alias or topic.
+type ErrDuplicateAlias struct {
+	// The name of the alias that caused the conflict.
+	AliasName string
+	// The topic to which the existing conflicting alias points, if applicable.
+	// Will be empty if the conflict is with an existing topic name rather than alias.
+	OtherAliasTarget string
+}
+
+// Error implements the error interface.
+func (e ErrDuplicateAlias) Error() string {
+	if e.OtherAliasTarget != "" {
+		return fmt.Sprintf(
+			"a help topic with name %q already exists",
+			e.AliasName,
+		)
+	}
+	return fmt.Sprintf(
+		"an alias with name %q already exists for topic %q",
+		e.AliasName,
+		e.OtherAliasTarget,
+	)
+}
+
+// addAlias adds a new alias for a given topic.
+// If the alias conflicts with an existing topic name, an [ErrDuplicateAlias] will be returned.
+func (s *Store) addAlias(topicName, aliasName string) error {
+	// Check that alias doesn't conflict with existing topics
+	var topicExists bool
+	err := s.db.QueryRow(`
+		SELECT EXISTS(SELECT 1 FROM topics WHERE name = ?)
+	`, aliasName).Scan(&topicExists)
+	if err != nil {
+		return fmt.Errorf("failed to check for conflicting topic name %q: %w", aliasName, err)
+	}
+
+	if topicExists {
+		return ErrDuplicateAlias{AliasName: aliasName}
+	}
+
+	existing, err := s.getTopicByAlias(aliasName)
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return fmt.Errorf("failed to check for existing alias %q: %w", aliasName, err)
+	}
+	if existing.Name != "" {
+		return ErrDuplicateAlias{AliasName: aliasName, OtherAliasTarget: existing.Name}
+	}
+
+	result, err := s.db.Exec(`
+		INSERT INTO topic_aliases (topic_id, alias_name)
+			SELECT id, ?
+			FROM topics
+			WHERE name = ?;
+	`, aliasName, topicName)
+	if errors.Is(err, &mysql.MySQLError{Number: 1062}) {
+		return ErrDuplicateAlias{AliasName: aliasName}
+	} else if err != nil {
+		return fmt.Errorf("failed to add alias %q for topic %q: %w", aliasName, topicName, err)
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf(
+			"failed to get rows affected for alias %q insertion: %w",
+			aliasName,
+			err,
+		)
+	}
+	if rowsAffected == 0 {
+		return fmt.Errorf(
+			"failed to add alias %q for topic %q: %w",
+			aliasName,
+			topicName,
+			sql.ErrNoRows,
+		)
+	}
+
+	return nil
+}
+
+// deleteAlias deletes the alias with the given name.
+// If no alias with the given name exists, an error implementing [sql.ErrNoRows] will be returned.
+func (s *Store) deleteAlias(aliasName string) error {
+	result, err := s.db.Exec(`
+		DELETE FROM topic_aliases WHERE alias_name = ?
+	`, aliasName)
+	if err != nil {
+		return fmt.Errorf("failed to delete alias %q: %w", aliasName, err)
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("failed to get rows affected for alias deletion %q: %w", aliasName, err)
+	}
+	if rowsAffected == 0 {
+		return fmt.Errorf("failed to delete alias %q: %w", aliasName, sql.ErrNoRows)
+	}
+
+	return nil
+}
+
+// getTopicByAlias retrieves a help topic by one of its aliases.
+// If no topic with the given alias exists, an error implementing [sql.ErrNoRows] will be returned.
+func (s *Store) getTopicByAlias(aliasName string) (HelpTopic, error) {
+	var (
+		id        topicId
+		name      string
+		text      string
+		updatedAt time.Time
+	)
+
+	err := s.db.QueryRow(`
+		SELECT t.id, t.name, t.text, t.updated_at
+		FROM topics t
+		JOIN topic_aliases a ON t.id = a.topic_id
+		WHERE a.alias_name = ?
+	`, aliasName).Scan(&id, &name, &text, &updatedAt)
+	if err != nil {
+		return HelpTopic{}, fmt.Errorf("failed to get help topic for alias %q: %w", aliasName, err)
+	}
+
 	return HelpTopic{
 		id:        id,
-		Name:      topicName,
+		Name:      name,
 		Text:      text,
 		UpdatedAt: updatedAt,
 	}, nil

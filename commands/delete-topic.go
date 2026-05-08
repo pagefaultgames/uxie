@@ -20,7 +20,7 @@ import (
 var deleteTopic = command{
 	Command: tempest.Command{
 		Name:        "delete-topic",
-		Description: "Delete a help topic from the database.",
+		Description: "Delete a help topic from the database, alongside any associated aliases.",
 		Type:        tempest.CHAT_INPUT_COMMAND_TYPE,
 		Options: []tempest.CommandOption{{
 			Type:         tempest.STRING_OPTION_TYPE,
@@ -31,7 +31,7 @@ var deleteTopic = command{
 			MaxLength:    100,
 			AutoComplete: true,
 		}},
-		AutoCompleteHandler: helpTopicAutocompleteFunc("topic"),
+		AutoCompleteHandler: helpTopicAutocompleteFunc("topic", false),
 		SlashCommandHandler: handleDeleteTopic,
 	},
 }

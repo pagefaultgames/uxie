@@ -13,14 +13,16 @@ import (
 	"log/slog"
 )
 
-// A Migration represents a single migration to be applied to the database.
-type Migration struct {
+// A migration represents a single migration to be applied to the database.
+type migration struct {
+	// The name of the migration; used for historical purposes and logging, but is otherwise unused.
+	name string
 	// The 0-indexed version of the database to apply to.
-	Version int
+	version int
 	// The SQL query to execute when increasing the version.
-	Up string
+	up string
 	// The SQL query to execute when decreasing the version.
-	Down string
+	down string
 }
 
 //go:embed migrations/00001_add_updated_at_and_versions.up.sql
@@ -29,11 +31,24 @@ var migration00001Up string
 //go:embed migrations/00001_add_updated_at_and_versions.down.sql
 var migration00001Down string
 
-var migrations = []Migration{
+//go:embed migrations/00002_add_aliases.up.sql
+var migration00002Up string
+
+//go:embed migrations/00002_add_aliases.down.sql
+var migration00002Down string
+
+var migrations = []migration{
 	{
-		Version: 1,
-		Up:      migration00001Up,
-		Down:    migration00001Down,
+		name:    "Add updated_at column and schema versioning",
+		version: 1,
+		up:      migration00001Up,
+		down:    migration00001Down,
+	},
+	{
+		name:    "Add aliases table",
+		version: 2,
+		up:      migration00002Up,
+		down:    migration00002Down,
 	},
 }
 
@@ -59,20 +74,25 @@ func runMigrations(ctx context.Context, db *sql.DB) error {
 	}()
 
 	for _, migration := range migrations {
-		if migration.Version <= schemaVersion {
+		if migration.version <= schemaVersion {
 			continue
 		}
 
-		if _, err := tx.ExecContext(ctx, migration.Up); err != nil {
-			return fmt.Errorf("failed to apply migration %d: %w", migration.Version, err)
+		if _, err := tx.ExecContext(ctx, migration.up); err != nil {
+			return fmt.Errorf(
+				"failed to apply migration %q (v%d): %w",
+				migration.name,
+				migration.version,
+				err,
+			)
 		}
 
-		_, err := tx.ExecContext(ctx, `UPDATE schema_version SET version = ?`, migration.Version)
+		_, err := tx.ExecContext(ctx, `UPDATE schema_version SET version = ?`, migration.version)
 		if err != nil {
-			return fmt.Errorf("failed to update schema version to %d: %w", migration.Version, err)
+			return fmt.Errorf("failed to update schema version to %d: %w", migration.version, err)
 		}
 
-		schemaVersion = migration.Version
+		schemaVersion = migration.version
 	}
 
 	if err := tx.Commit(); err != nil {

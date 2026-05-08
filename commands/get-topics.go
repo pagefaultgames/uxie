@@ -17,12 +17,20 @@ var getTopics = command{
 		Name:        "get-topics",
 		Description: "Get a list of all available help topics.",
 		Type:        tempest.CHAT_INPUT_COMMAND_TYPE,
-		Options: []tempest.CommandOption{{
-			Type:        tempest.BOOLEAN_OPTION_TYPE,
-			Required:    false,
-			Name:        "ephemeral",
-			Description: "Whether the reply should be ephemeral (only visible to you, default true)",
-		}},
+		Options: []tempest.CommandOption{
+			{
+				Type:        tempest.BOOLEAN_OPTION_TYPE,
+				Required:    false,
+				Name:        "ephemeral",
+				Description: "Whether the reply should be ephemeral (only visible to you, default true)",
+			},
+			{
+				Type:        tempest.BOOLEAN_OPTION_TYPE,
+				Required:    false,
+				Name:        "include-aliases",
+				Description: "Whether to include aliases in the list of topics (default false)",
+			},
+		},
 		SlashCommandHandler: func(ctx *tempest.CommandInteraction) {
 			ephemeral := true
 			if len(ctx.Data.Options) > 0 {
@@ -31,7 +39,14 @@ var getTopics = command{
 				}
 			}
 
-			text, err := getAllTopicText()
+			includeAliases := false
+			if len(ctx.Data.Options) > 1 {
+				if v, ok := ctx.Data.Options[1].Value.(bool); ok {
+					includeAliases = v
+				}
+			}
+
+			text, err := getAllTopicText(includeAliases)
 			if err != nil {
 				utils.ErrorAttrs("Failed to retrieve help topics from database",
 					slog.String("username", ctx.BaseUser().Username),
@@ -46,7 +61,11 @@ var getTopics = command{
 				return
 			}
 
-			_ = ctx.SendLinearReply("## Available help topics:\n"+text, ephemeral)
+			header := "## Available help topics:\n"
+			if includeAliases {
+				header = "## Available help topics and aliases:\n"
+			}
+			_ = ctx.SendLinearReply(header+text, ephemeral)
 		},
 	},
 }

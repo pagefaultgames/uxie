@@ -59,19 +59,31 @@ func getStore() (*Store, error) {
 	return helpTopics, nil
 }
 
-// GetHelpTopic retrieves the stored [HelpTopic] with the given name.
-// If no such topic exists, an error implementing [sql.ErrNoRows] will be returned.
-func GetHelpTopic(name string) (HelpTopic, error) {
+// GetHelpTopic retrieves the stored [HelpTopic] with the given name or alias.
+//
+// It returns the topic and any error produced during retrieval.
+// Callers _must_ check the error before using the returned topic.
+//
+// If no topic with the given name exists, an error implementing [sql.ErrNoRows] will be returned.
+func GetHelpTopic(name string) (topic HelpTopic, err error) {
 	store, err := getStore()
 	if err != nil {
 		return HelpTopic{}, err
 	}
 
-	return store.getHelpTopic(name)
+	// check directly first
+	if topic, err := store.getHelpTopic(name); err == nil || !errors.Is(err, sql.ErrNoRows) {
+		return topic, err
+	}
+
+	// no rows matched; check aliases
+	return store.getTopicByAlias(name)
 }
 
 // GetAllTopics retrieves all help topics stored in the database.
-func GetAllTopics() ([]HelpTopic, error) {
+//
+// It returns the list of topics and any error produced during retrieval.
+func GetAllTopics() (topics []HelpTopic, err error) {
 	store, err := getStore()
 	if err != nil {
 		return nil, err
@@ -80,9 +92,19 @@ func GetAllTopics() ([]HelpTopic, error) {
 	return store.getAllTopics()
 }
 
+// GetAllAliases retrieves all help topic aliases stored in the database.
+func GetAllAliases() ([]TopicAlias, error) {
+	store, err := getStore()
+	if err != nil {
+		return nil, err
+	}
+
+	return store.getAllAliases()
+}
+
 // ErrStaleTopic represents an error produced by inserting a topic that was modified since last retrieved.
 //
-// It does not contain the expected timestamp value as callers are assumed to already have said value.
+// It does not contain the expected timestamp value as callers are assumed to already have access to said value.
 type ErrStaleTopic struct {
 	// The name of the database topic for which an update was attempted.
 	DBTopicName string
@@ -134,4 +156,24 @@ func DeleteTopic(topicName string) (HelpTopic, error) {
 	}
 
 	return store.deleteTopic(topicName)
+}
+
+func AddAlias(topicName, aliasName string) error {
+	store, err := getStore()
+	if err != nil {
+		return err
+	}
+
+	return store.addAlias(topicName, aliasName)
+}
+
+// DeleteAlias deletes a help topic alias by name.
+// If no alias with the given name exists, an error implementing [sql.ErrNoRows] will be returned.
+func DeleteAlias(aliasName string) error {
+	store, err := getStore()
+	if err != nil {
+		return err
+	}
+
+	return store.deleteAlias(aliasName)
 }
