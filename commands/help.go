@@ -49,11 +49,7 @@ func showHelpTopic(ctx *tempest.CommandInteraction) {
 		return
 	}
 
-	ephemeral, found := utils.ValidateOptionValue[bool](ctx, "ephemeral")
-	if !found {
-		// default to false if not provided
-		ephemeral = false
-	}
+	ephemeral := utils.GetOptionOrDefault(ctx, "ephemeral", false)
 
 	topic, err := db.GetHelpTopic(opt)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -83,9 +79,11 @@ func showHelpTopic(ctx *tempest.CommandInteraction) {
 
 func formatHelpMessage(topic db.HelpTopic) string {
 	var b strings.Builder
-	b.WriteString("**")
-	b.WriteString(topic.Name)
-	b.WriteString("**\n\n")
+	if !topic.OmitTitle {
+		b.WriteString("**")
+		b.WriteString(topic.Name)
+		b.WriteString("**\n\n")
+	}
 	b.WriteString(topic.Text)
 	b.WriteRune('\n')
 	return b.String()

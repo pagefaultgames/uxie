@@ -14,12 +14,14 @@ var pingCommand = command{
 		Name:                "ping",
 		Description:         "Check if the bot is alive",
 		RequiredPermissions: tempest.ADMINISTRATOR_PERMISSION_FLAG,
-		Options: []tempest.CommandOption{{
-			Type:        tempest.BOOLEAN_OPTION_TYPE,
-			Required:    false,
-			Name:        "ephemeral",
-			Description: "Whether the reply should be ephemeral (only visible to you, default true)",
-		}},
+		Options: []tempest.CommandOption{
+			{
+				Type:        tempest.BOOLEAN_OPTION_TYPE,
+				Required:    false,
+				Name:        "ephemeral",
+				Description: "Whether the reply should be ephemeral (only visible to you, default true)",
+			},
+		},
 		SlashCommandHandler: func(itx *tempest.CommandInteraction) {
 			ephemeral := true
 			if len(itx.Data.Options) > 0 {

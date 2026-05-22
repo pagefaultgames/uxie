@@ -37,6 +37,12 @@ var migration00002Up string
 //go:embed migrations/00002_add_aliases.down.sql
 var migration00002Down string
 
+//go:embed migrations/00003_add_omit_title.up.sql
+var migration00003Up string
+
+//go:embed migrations/00003_add_omit_title.down.sql
+var migration00003Down string
+
 var migrations = []migration{
 	{
 		name:    "Add updated_at column and schema versioning",
@@ -49,6 +55,12 @@ var migrations = []migration{
 		version: 2,
 		up:      migration00002Up,
 		down:    migration00002Down,
+	},
+	{
+		name:    "Add omit_title column to topics",
+		version: 3,
+		up:      migration00003Up,
+		down:    migration00003Down,
 	},
 }
 

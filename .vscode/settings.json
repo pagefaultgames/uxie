@@ -10,5 +10,8 @@
     ],
     "explorer.fileNesting.patterns": {
         "*.up.sql": "${capture}.down.sql",
+    },
+    "[sql]": {
+        "editor.formatOnSave": false
     }
 }

@@ -49,42 +49,37 @@ var addHelp = command{
 }
 
 func handleAddHelp(ctx *tempest.CommandInteraction) {
-	topic, found := utils.ValidateOptionValue[string](ctx, "topic")
+	topicName, found := utils.ValidateOptionValue[string](ctx, "topic")
 	if !found {
 		return
 	}
 
-	if errMsg := checkTopicValidity(topic, "topic"); errMsg != "" {
+	if errMsg := checkTopicValidity(topicName, "topic"); errMsg != "" {
 		_ = ctx.SendLinearReply(errMsg, true)
 		return
 	}
 
 	// Check if the command already exists, adjusting and pre-filling various portions of the modal if so.
-	var (
-		helpText   string
-		topicName  = topic
-		modalTitle = "Create new help topic"
-		updatedAt  = time.Now()
-	)
-	existing, err := db.GetHelpTopic(topic)
+	existing, err := db.GetHelpTopic(topicName)
+	ptr := &existing
+
 	switch {
 	case err == nil:
-		helpText = existing.Text
-		modalTitle = "Edit existing help topic"
-		updatedAt = existing.UpdatedAt
-		topicName = existing.Name // use the existing topic name to preserve capitalization/aliasing
+		// in case this is an alias, we want to pre-fill with the base topic's real name
+		topicName = existing.Name
 	case errors.Is(err, sql.ErrNoRows):
-		// do nothing (create a new one from scratch)
+		// unset existing to indicate this is a fresh topic
+		ptr = nil
 	default:
 		utils.ErrorAttrs("Failed to check for existing help topic in database",
 			slog.String("username", ctx.BaseUser().Username),
-			slog.String("topic", topic),
+			slog.String("topic", topicName),
 			slog.Uint64("ID", uint64(ctx.ID)),
 			slog.Any("error", err),
 		)
 		utils.SendErrorMessage(
 			ctx,
-			"Failed to check for existence of help topic "+topic+"!",
+			"Failed to check for existence of help topic "+topicName+"!",
 			err,
 		)
 		return
@@ -98,16 +93,56 @@ func handleAddHelp(ctx *tempest.CommandInteraction) {
 		return
 	}
 
-	sendAddHelpModal(ctx, topicName, modalTitle, helpText, updatedAt)
+	sendAddHelpModal(ctx, topicName, ptr)
 }
 
+// sendAddHelpModal sends the add-help modal to the user, pre-filling it with the existing topic's contents if present.
+// A nil existing pointer should indicate a lack of an existing topic
 func sendAddHelpModal(
 	ctx *tempest.CommandInteraction,
-	topicName, modalTitle, helpText string,
-	updatedAt time.Time,
+	topicName string,
+	existing *db.HelpTopic,
 ) {
+	var (
+		helpText   string
+		updatedAt  = time.Now()
+		modalTitle = "Create new help topic"
+	)
+
+	if existing != nil {
+		modalTitle = "Edit existing help topic"
+		helpText = existing.Text
+		updatedAt = existing.UpdatedAt
+	}
+
 	// Store the timestamp in the 2 components' ID fields
 	microLow, microHigh := convertTimestampToID(updatedAt)
+
+	// NB: the below descriptions must never exceed 75 characters due to length limits
+	omitTitleOptions := []tempest.SelectMenuOption{
+		{
+			Label:       "Yes",
+			Value:       "true",
+			Description: "Show the title every time this topic is displayed.",
+		},
+		{
+			Label:       "No",
+			Value:       "false",
+			Description: "Omit the title when displaying this topic.",
+		},
+	}
+
+	switch {
+	case existing == nil:
+		// default to showing the title
+		omitTitleOptions[0].Default = true
+	case existing.OmitTitle:
+		omitTitleOptions[1].Description += " (Currently enabled)"
+		omitTitleOptions[1].Default = true
+	default:
+		omitTitleOptions[0].Default = true
+		omitTitleOptions[0].Description += " (Currently enabled)"
+	}
 
 	err := ctx.SendModal(tempest.ResponseModalData{
 		Title:    modalTitle,
@@ -119,7 +154,6 @@ func sendAddHelpModal(
 				Content: "### Selected Help Topic:\n`" + topicName + "`",
 			},
 			// TODO: Add support for more than just plaintext content in the help topic body
-			// TODO: More configuration?
 			tempest.LabelComponent{
 				Type:  tempest.LABEL_COMPONENT_TYPE,
 				Label: "What text should the topic display?",
@@ -134,6 +168,17 @@ func sendAddHelpModal(
 					// TODO: Do bots need to adhere to normal non-nitro message length limits?
 					MaxLength:   2000,
 					Placeholder: "Enter the help topic's body.\nAll Markdown features are supported.",
+				},
+			},
+			tempest.LabelComponent{
+				Type:  tempest.LABEL_COMPONENT_TYPE,
+				Label: "Should the topic's title be included?",
+				Component: tempest.StringSelectComponent{
+					Type:      tempest.STRING_SELECT_COMPONENT_TYPE,
+					CustomID:  "omit-title",
+					Options:   omitTitleOptions,
+					Required:  true,
+					MinValues: 1,
 				},
 			},
 		},
@@ -165,40 +210,27 @@ func sendAddHelpModal(
 
 // addHelpTopic handles the submission of the add-help modal.
 func addHelpTopic(mtx tempest.ModalInteraction) {
-	textDisplay, ok := mtx.Data.Components[0].(tempest.TextDisplayComponent)
-	if !ok {
-		slog.Error("Malformed add-help modal: first component was not a text display")
-		_ = mtx.AcknowledgeWithLinearMessage(
-			"Could not determine help topic from modal contents!",
-			true,
+	textDisplay, tok := mtx.Data.Components[0].(tempest.TextDisplayComponent)
+	textInput, iok := getComponentFromLabel[tempest.TextInputComponent](mtx.Data.Components[1])
+	stringSelect, sok := getComponentFromLabel[tempest.StringSelectComponent](
+		mtx.Data.Components[2],
+	)
+
+	if !tok || !iok || !sok {
+		utils.ErrorAttrs("Failed to parse components from add-help modal submission",
+			slog.String("username", mtx.BaseUser().Username),
+			slog.Uint64("ID", uint64(mtx.ID)),
 		)
+		_ = mtx.AcknowledgeWithLinearMessage("Failed to parse submitted data from modal!", true)
 		return
 	}
 
-	label, ok := mtx.Data.Components[1].(tempest.LabelComponent)
-	if !ok {
-		slog.Error("Malformed add-help modal: second component was not a label")
-		_ = mtx.AcknowledgeWithLinearMessage(
-			"Could not determine help topic from modal contents!",
-			true,
-		)
-		return
-	}
-
-	input, ok := label.Component.(tempest.TextInputComponent)
-	if !ok {
-		slog.Error("Malformed add-help modal: label component was not a text input")
-		_ = mtx.AcknowledgeWithLinearMessage(
-			"Could not determine help topic from modal contents!",
-			true,
-		)
-		return
-	}
+	omitTitle := len(stringSelect.Values) > 0 && stringSelect.Values[0] == "false"
 
 	// extract stored values from the modal
-	topicName := input.CustomID
-	text := input.Value
-	origUpdatedAt := extractTimestampFromID(textDisplay.ID, input.ID)
+	topicName := textInput.CustomID
+	text := textInput.Value
+	origUpdatedAt := extractTimestampFromID(textDisplay.ID, textInput.ID)
 
 	if text == "" {
 		utils.InfoAttrs("Body text not found in add-help modal",
@@ -236,7 +268,7 @@ func addHelpTopic(mtx tempest.ModalInteraction) {
 		usersModifyingHelpTopics.Unlock(topicName)
 	}()
 
-	inserted, err := db.UpsertHelpTopic(topicName, text, origUpdatedAt)
+	inserted, err := db.UpsertHelpTopic(topicName, text, origUpdatedAt, omitTitle)
 
 	// check for db optimistic locking and give a slightly more helpful error message
 	var staleErr db.ErrStaleTopic
@@ -275,7 +307,7 @@ func addHelpTopic(mtx tempest.ModalInteraction) {
 
 	opStr := "updated"
 	if inserted {
-		opStr = "added"
+		opStr = "created"
 	}
 
 	utils.InfoAttrs("Topic successfully "+opStr+" to database",
@@ -286,7 +318,7 @@ func addHelpTopic(mtx tempest.ModalInteraction) {
 	)
 
 	_ = mtx.AcknowledgeWithLinearMessage(
-		"Help topic `"+topicName+"` successfully "+opStr+" to the database!"+
+		"Help topic `"+topicName+"` successfully "+opStr+"!"+
 			"\nTo view the topic, use the `/help` command.",
 		true,
 	)
