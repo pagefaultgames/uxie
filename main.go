@@ -83,11 +83,15 @@ func main() {
 	slog.Info("Serving application at: " + ADDRESS + "/discord/callback")
 
 	go func() {
-		if err := server.ListenAndServe(); err == http.ErrServerClosed {
+		err := server.ListenAndServe()
+		if err == http.ErrServerClosed {
 			stop()
 			return
 		}
 
+		if err == nil {
+			panic("invariant of listenAndServe violated: returned nil error")
+		}
 		if strings.Contains(err.Error(), "address already in use") {
 			utils.ErrorAttrs(
 				"TCP address already in use. Make sure no other instance of the server is running and that the port is free.",

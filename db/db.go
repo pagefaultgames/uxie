@@ -129,6 +129,7 @@ func (e ErrStaleTopic) Error() string {
 func UpsertHelpTopic(
 	topicName, text string,
 	lastUpdatedAt time.Time,
+	omitTitle bool,
 ) (inserted bool, err error) {
 	store, err := getStore()
 	if err != nil {
@@ -136,7 +137,7 @@ func UpsertHelpTopic(
 	}
 
 	// try insert
-	err = store.addHelpTopic(topicName, text)
+	err = store.addHelpTopic(topicName, text, omitTitle)
 	if err == nil {
 		return true, nil
 	} else if !errors.Is(err, &mysql.MySQLError{Number: 1062}) { // duplicate key error code
@@ -144,7 +145,7 @@ func UpsertHelpTopic(
 	}
 
 	// update if insert failed due to duplicate key
-	return false, store.updateHelpTopic(topicName, text, lastUpdatedAt)
+	return false, store.updateHelpTopic(topicName, text, lastUpdatedAt, omitTitle)
 }
 
 // DeleteTopic deletes the help topic with the given name, returning the deleted topic and any error produced.

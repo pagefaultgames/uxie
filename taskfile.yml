@@ -7,7 +7,6 @@ tasks:
     cmds:
       - task: lefthook-install
       - task: lefthook-setup
-      - cmd: command -v gcc || echo "GCC not found (required for go-sqlite3); please install"
     method: none
 
   lefthook-install:

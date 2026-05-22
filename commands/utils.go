@@ -18,6 +18,24 @@ import (
 
 var pingRe = regexp.MustCompile(`(^|\s)@`)
 
+// getComponentFromLabel is a helper function to extract a child component of a component expected to be a label.
+func getComponentFromLabel[T tempest.LabelChildComponent](
+	component tempest.ModalComponent,
+) (T, bool) {
+	var zero T
+	label, ok := component.(tempest.LabelComponent)
+	if !ok {
+		return zero, false
+	}
+
+	child, ok := label.Component.(T)
+	if !ok {
+		return zero, false
+	}
+
+	return child, true
+}
+
 // checkTopicValidity performs basic checks on the name of a topic or alias, returning the error message to display to the user.
 // An empty string signifies a valid topic.
 //
