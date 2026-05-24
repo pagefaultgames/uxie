@@ -1,0 +1,51 @@
+name: Deploy Main
+
+on:
+  workflow_run:
+    workflows: ["Code Quality"]
+    branches: "main"
+  # allow triggering manually for testing purposes
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  go_version: 1.25.5
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    if: github.repository == 'pagefaultgames/uxie' && (github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success')
+    timeout-minutes: 10
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Git repository
+        uses: actions/checkout@v4
+
+      - name: Setup Go environment
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.go_version }}
+          check-latest: true
+          cache: true
+
+      - name: Build Uxie
+        run: go build -o dist/uxie .
+
+      # TODO: Ask pancakes for env vars and store them in secrets
+      - name: Set up SSH
+        run: |
+          mkdir ~/.ssh
+          echo "${{ secrets.SSH_PUBLIC_KEY }}" > ~/.ssh/id_ed25519.pub
+          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/*
+          ssh-keyscan -H ${{ secrets.SSH_HOST }} >> ~/.ssh/known_hosts
+
+      - name: Deploy binary on server
+        run: |
+          scp dist/uxie ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}:${{ secrets.DESTINATION_DIR }}
+          ssh ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} ~/uxiedeploy
