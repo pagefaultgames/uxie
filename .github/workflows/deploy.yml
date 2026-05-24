@@ -48,4 +48,4 @@ jobs:
       - name: Deploy binary on server
         run: |
           scp dist/uxie ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}:${{ secrets.DESTINATION_DIR }}
-          ssh ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} ~/uxiedeploy
+          ssh ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} '~/uxiedeploy'
