@@ -13,5 +13,6 @@ var allCommands = []command{
 	pingCommand,
 	getTopics,
 	removeAlias,
+	renameTopic,
 	deleteTopic,
 }
