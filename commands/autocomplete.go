@@ -81,8 +81,8 @@ func helpTopicAutocompleteFunc(
 
 			for _, alias := range aliases {
 				if strings.HasPrefix(
-					strings.ToLower(alias.AliasName),
-					strings.ToLower(focusedText),
+					utils.NormalizeUnicode(strings.ToLower(alias.AliasName)),
+					utils.NormalizeUnicode(strings.ToLower(focusedText)),
 				) {
 					choices = append(choices, tempest.CommandOptionChoice{
 						Name: formatAliasText(
