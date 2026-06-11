@@ -177,6 +177,75 @@ func (s *Store) addHelpTopic(name, text string, omitTitle bool) error {
 	return nil
 }
 
+// ErrDuplicateRename represents the error produced when attempting to rename a help topic to one already in use.
+type ErrDuplicateRename struct {
+	OldName string
+	NewName string
+	// Whether the conflicting topic is an alias (as opposed to a full-on help topic).
+	Alias bool
+}
+
+// Error implements the error interface.
+func (e ErrDuplicateRename) Error() string {
+	topicType := "a help topic"
+	if e.Alias {
+		topicType = "an alias"
+	}
+	return fmt.Sprintf(
+		"cannot rename topic %q to %q; %s with that name already exists",
+		e.OldName,
+		e.NewName,
+		topicType,
+	)
+}
+
+// renameHelpTopic renames an existing help topic, changing its name from oldName to newName.
+// If no topic with the given oldName exists, an error implementing [sql.ErrNoRows] will be returned.
+// If a topic with newName already exists, an [ErrDuplicateRename] will be returned.
+func (s *Store) renameTopic(oldName, newName string) error {
+	if _, err := s.getHelpTopic(newName); err == nil {
+		return ErrDuplicateRename{OldName: oldName, NewName: newName}
+	} else if !errors.Is(err, sql.ErrNoRows) {
+		return fmt.Errorf("failed to check for existing topic with name %q: %w", newName, err)
+	}
+
+	if err := s.db.QueryRow(
+		`SELECT * FROM topic_aliases WHERE alias_name = ?`,
+		newName,
+	).Scan(); err == nil {
+		return ErrDuplicateRename{OldName: oldName, NewName: newName, Alias: true}
+	} else if !errors.Is(err, sql.ErrNoRows) {
+		return fmt.Errorf("failed to check for existing alias with name %q: %w", newName, err)
+	}
+
+	result, err := s.db.Exec(`
+		UPDATE topics SET name = ? WHERE name = ?
+	`, newName, oldName)
+	if err != nil {
+		return fmt.Errorf("failed to rename help topic from %q to %q: %w", oldName, newName, err)
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf(
+			"failed to get rows affected for help topic rename from %q to %q: %w",
+			oldName,
+			newName,
+			err,
+		)
+	}
+	if rowsAffected == 0 {
+		return fmt.Errorf(
+			"failed to rename help topic from %q to %q: %w",
+			oldName,
+			newName,
+			sql.ErrNoRows,
+		)
+	}
+
+	return nil
+}
+
 // updateHelpTopic updates the contents of an existing help topic, using the provided timestamp to verify that the topic has not been modified since it was last retrieved.
 // It returns any error produced.
 //

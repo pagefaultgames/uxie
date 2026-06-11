@@ -148,6 +148,18 @@ func UpsertHelpTopic(
 	return false, store.updateHelpTopic(topicName, text, lastUpdatedAt, omitTitle)
 }
 
+// RenameTopic renames an existing help topic, returning any error produced during the operation.
+// If no topic with the given name exists, an error implementing [sql.ErrNoRows] will be returned.
+// If the new name conflicts with an existing topic, an error implementing [ErrDuplicateTopicName] will be returned.
+func RenameTopic(oldName, newName string) error {
+	store, err := getStore()
+	if err != nil {
+		return err
+	}
+
+	return store.renameTopic(oldName, newName)
+}
+
 // DeleteTopic deletes the help topic with the given name, returning the deleted topic and any error produced.
 // If no topic with the given name exists, an error implementing [sql.ErrNoRows] will be returned.
 func DeleteTopic(topicName string) (HelpTopic, error) {
@@ -159,6 +171,8 @@ func DeleteTopic(topicName string) (HelpTopic, error) {
 	return store.deleteTopic(topicName)
 }
 
+// AddAlias adds a new alias for a given topic.
+// If the alias conflicts with an existing topic name, an [ErrDuplicateAlias] will be returnedA
 func AddAlias(topicName, aliasName string) error {
 	store, err := getStore()
 	if err != nil {

@@ -46,3 +46,17 @@ tasks:
     desc: Run the Uxie backend binary.
     cmd: go run .
     method: none
+
+  tests:
+    desc: Run all tests with gotestsum and generate reports.
+    cmds:
+      - cmd: >
+          go tool gotest.tools/gotestsum 
+          --format=testname
+          --format-hide-empty-pkg
+          --format-icons=text
+          --junitfile=./tmp/test-results/go-test-report.xml
+          --junitfile-hide-empty-pkg
+          --junitfile-testcase-classname=short
+          --junitfile-testsuite-name=short
+    method: none
